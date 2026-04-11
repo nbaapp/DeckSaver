@@ -1,0 +1,31 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 61ae086799ced4223bae9201713b3670, type: 3}
+  m_Name: Warlord
+  m_EditorClassIdentifier: Assembly-CSharp::BoonData
+  boonName: Warlord
+  description: Apply 1 Weak to all enemies at the start of your turn.
+  icon: {fileID: 0}
+  effects:
+  - trigger: 4
+    statType: 0
+    statValue: 0
+    target: 1
+    valueSource: 0
+    effects:
+    - type: 5
+      baseValue: 1
+      hits: 1
+      statusType: 5
+    statusCondition: 0
+    specificStatus: 0
+    statusSet: 

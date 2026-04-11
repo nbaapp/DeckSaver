@@ -1,0 +1,60 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6, type: 3}
+  m_Name: StoneGolem
+  m_EditorClassIdentifier: Assembly-CSharp::EnemyData
+  enemyName: Stone Golem
+  artwork: {fileID: -2135585597343286014, guid: 5aa8b770bc43046bc8d993d0d5b7f4a5, type: 3}
+  maxHealth: 40
+  attacks:
+  - attackName: Slam
+    patternType: 1
+    moveRange: 1
+    attackRange: 0
+    attackPattern:
+    - {x: 0, y: 0}
+    - {x: 0, y: 1}
+    - {x: 0, y: 2}
+    effects:
+    - type: 0
+      baseValue: 6
+      hits: 1
+      statusType: 0
+  - attackName: Tremor
+    patternType: 2
+    moveRange: 0
+    attackRange: 2
+    attackPattern:
+    - {x: 0, y: 0}
+    - {x: 1, y: 0}
+    - {x: -1, y: 0}
+    - {x: 0, y: 1}
+    - {x: 0, y: -1}
+    effects:
+    - type: 0
+      baseValue: 4
+      hits: 1
+      statusType: 0
+  - attackName: Fortify
+    patternType: 0
+    moveRange: 0
+    attackRange: 0
+    attackPattern: []
+    effects:
+    - type: 5
+      baseValue: 3
+      hits: 1
+      statusType: 8
+    - type: 1
+      baseValue: 8
+      hits: 1
+      statusType: 0

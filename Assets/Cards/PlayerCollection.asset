@@ -1,0 +1,66 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d6e7f8a9b0c1234567890123def45678, type: 3}
+  m_Name: PlayerCollection
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerCollection
+  effectFragments:
+  - fragment: {fileID: 11400000, guid: ef01ef010000000000000000ef01ef01, type: 2}
+    count: 9
+  - fragment: {fileID: 11400000, guid: ef0aef0a0000000000000000ef0aef0a, type: 2}
+    count: 9
+  - fragment: {fileID: 11400000, guid: ef06ef060000000000000000ef06ef06, type: 2}
+    count: 10
+  - fragment: {fileID: 11400000, guid: 8051b11e2066b4c27b816baa2bc57197, type: 2}
+    count: 9
+  - fragment: {fileID: 11400000, guid: ef02ef020000000000000000ef02ef02, type: 2}
+    count: 9
+  - fragment: {fileID: 11400000, guid: ef08ef080000000000000000ef08ef08, type: 2}
+    count: 9
+  - fragment: {fileID: 11400000, guid: 00007caadc84140ea904b66a3d1d9fa7, type: 2}
+    count: 9
+  - fragment: {fileID: 11400000, guid: ef09ef090000000000000000ef09ef09, type: 2}
+    count: 9
+  - fragment: {fileID: 11400000, guid: ef03ef030000000000000000ef03ef03, type: 2}
+    count: 9
+  - fragment: {fileID: 11400000, guid: ef04ef040000000000000000ef04ef04, type: 2}
+    count: 9
+  - fragment: {fileID: 11400000, guid: ef05ef050000000000000000ef05ef05, type: 2}
+    count: 9
+  - fragment: {fileID: 11400000, guid: ef07ef070000000000000000ef07ef07, type: 2}
+    count: 9
+  modifierFragments:
+  - fragment: {fileID: 11400000, guid: de06de060000000000000000de06de06, type: 2}
+    count: 9
+  - fragment: {fileID: 11400000, guid: de0ade0a0000000000000000de0ade0a, type: 2}
+    count: 9
+  - fragment: {fileID: 11400000, guid: de05de050000000000000000de05de05, type: 2}
+    count: 9
+  - fragment: {fileID: 11400000, guid: 7703353fb723c4f9a890b2f10d3def8b, type: 2}
+    count: 8
+  - fragment: {fileID: 11400000, guid: c199c1685f54b45c4aad8a69544fe6e7, type: 2}
+    count: 9
+  - fragment: {fileID: 11400000, guid: de09de090000000000000000de09de09, type: 2}
+    count: 10
+  - fragment: {fileID: 11400000, guid: de03de030000000000000000de03de03, type: 2}
+    count: 9
+  - fragment: {fileID: 11400000, guid: de08de080000000000000000de08de08, type: 2}
+    count: 9
+  - fragment: {fileID: 11400000, guid: de07de070000000000000000de07de07, type: 2}
+    count: 9
+  - fragment: {fileID: 11400000, guid: de01de010000000000000000de01de01, type: 2}
+    count: 9
+  - fragment: {fileID: 11400000, guid: de02de020000000000000000de02de02, type: 2}
+    count: 9
+  decks: []
+  ownedCommanders:
+  - {fileID: 11400000, guid: 8846dc4e788a942daae301f16e58dd5f, type: 2}
+  - {fileID: 11400000, guid: c964c6987ee7049c7ba014b78bfb1821, type: 2}

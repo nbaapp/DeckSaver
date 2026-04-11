@@ -1,0 +1,28 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e689a5f16cc024b07a9d45ff1d9d6b56, type: 3}
+  m_Name: Run Data
+  m_EditorClassIdentifier: Assembly-CSharp::RunConfig
+  encountersPerSegment: 8
+  encounterPool:
+  - {fileID: 11400000, guid: 5fa6989d1d7824da4bd38338a7c75008, type: 2}
+  - {fileID: 11400000, guid: 65f50ab7d782f4d918e5871ce61f5e09, type: 2}
+  - {fileID: 11400000, guid: 5133f1093660441438fdf88c9d420cf7, type: 2}
+  - {fileID: 11400000, guid: 4d2e3a5d6209742cdb5df36a5d771f73, type: 2}
+  - {fileID: 11400000, guid: 32640425e155a4599a973f50ef32dd63, type: 2}
+  bossEncounter: {fileID: 11400000, guid: d2b86dd089e74445eb396d4b6f0e7b2f, type: 2}
+  postSaveEncounterPool: []
+  postSaveEncounterCount: 4
+  postSaveFinalBoss: {fileID: 0}
+  defaultRewardPool: {fileID: 11400000, guid: 7c6717878d6464217aff427007aee256, type: 2}
+  regularOfferCount: 2
+  bossOfferCount: 3

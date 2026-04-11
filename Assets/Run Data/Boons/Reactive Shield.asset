@@ -1,0 +1,31 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 61ae086799ced4223bae9201713b3670, type: 3}
+  m_Name: Reactive Shield
+  m_EditorClassIdentifier: Assembly-CSharp::BoonData
+  boonName: Reactive Shield
+  description: Gain 3 Block whenever you are struck.
+  icon: {fileID: 0}
+  effects:
+  - trigger: 9
+    statType: 0
+    statValue: 0
+    target: 0
+    valueSource: 0
+    effects:
+    - type: 1
+      baseValue: 3
+      hits: 1
+      statusType: 0
+    statusCondition: 0
+    specificStatus: 0
+    statusSet: 

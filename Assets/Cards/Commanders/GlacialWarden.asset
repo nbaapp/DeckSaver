@@ -1,0 +1,41 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7e3cd3f8875a74e2189323e25d171a28, type: 3}
+  m_Name: GlacialWarden
+  m_EditorClassIdentifier: Assembly-CSharp::CommanderData
+  commanderName: Glacial Warden
+  artwork: {fileID: 0}
+  sourceEffect: {fileID: 11400000, guid: 8051b11e2066b4c27b816baa2bc57197, type: 2}
+  sourceModifier: {fileID: 11400000, guid: c199c1685f54b45c4aad8a69544fe6e7, type: 2}
+  activeFlavorText: Damages and applies Slow 3 to all enemies
+  activesPerBattle: 1
+  activeEffects:
+  - type: 0
+    baseValue: 8
+    hits: 1
+    statusType: 0
+  - type: 5
+    baseValue: 3
+    hits: 1
+    statusType: 14
+  activeArea: {fileID: 0}
+  passiveFlavorText: Immune to Slow.
+  passiveEffects:
+  - trigger: 1
+    statType: 0
+    statValue: 0
+    target: 5
+    valueSource: 0
+    effects: []
+    statusCondition: 2
+    specificStatus: 14
+    statusSet: 

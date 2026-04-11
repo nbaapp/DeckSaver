@@ -1,0 +1,16 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a3b4c5d6e7f8901234567890abcdef12, type: 3}
+  m_Name: Blazing Javelin
+  m_EditorClassIdentifier:
+  effectFragment: {fileID: 11400000, guid: ef01ef010000000000000000ef01ef01, type: 2}
+  modifierFragment: {fileID: 11400000, guid: de03de030000000000000000de03de03, type: 2}

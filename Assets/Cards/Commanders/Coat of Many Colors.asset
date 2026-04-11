@@ -1,0 +1,59 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7e3cd3f8875a74e2189323e25d171a28, type: 3}
+  m_Name: Coat of Many Colors
+  m_EditorClassIdentifier: Assembly-CSharp::CommanderData
+  commanderName: Coat of Many Colors
+  artwork: {fileID: 0}
+  sourceEffect: {fileID: 11400000, guid: 00007caadc84140ea904b66a3d1d9fa7, type: 2}
+  sourceModifier: {fileID: 11400000, guid: 7703353fb723c4f9a890b2f10d3def8b, type: 2}
+  activeFlavorText: 'Applies Strong 1, Hard 1, Warded 1, Spikes 1, and Haste 1 to
+    self. '
+  activesPerBattle: 1
+  activeEffects:
+  - type: 5
+    baseValue: 1
+    hits: 1
+    statusType: 6
+  - type: 5
+    baseValue: 1
+    hits: 1
+    statusType: 8
+  - type: 5
+    baseValue: 1
+    hits: 1
+    statusType: 10
+  - type: 5
+    baseValue: 1
+    hits: 1
+    statusType: 11
+  - type: 5
+    baseValue: 1
+    hits: 1
+    statusType: 15
+  activeArea: {fileID: 11400000, guid: 7703353fb723c4f9a890b2f10d3def8b, type: 2}
+  passiveFlavorText: Every time you are affected with a buff, increase its value
+    by 1.
+  passiveEffects:
+  - trigger: 8
+    statType: 0
+    statValue: 0
+    target: 0
+    valueSource: 3
+    effects:
+    - type: 5
+      baseValue: 1
+      hits: 0
+      statusType: 0
+    statusCondition: 2
+    specificStatus: 0
+    statusSet: 06000000080000000a0000000b0000000d0000000f00000010000000

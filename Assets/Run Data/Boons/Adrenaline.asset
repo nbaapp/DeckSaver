@@ -1,0 +1,31 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 61ae086799ced4223bae9201713b3670, type: 3}
+  m_Name: Adrenaline
+  m_EditorClassIdentifier: Assembly-CSharp::BoonData
+  boonName: Adrenaline
+  description: Draw 1 card whenever you take damage.
+  icon: {fileID: 0}
+  effects:
+  - trigger: 10
+    statType: 0
+    statValue: 0
+    target: 0
+    valueSource: 0
+    effects:
+    - type: 3
+      baseValue: 1
+      hits: 1
+      statusType: 0
+    statusCondition: 0
+    specificStatus: 0
+    statusSet: 
