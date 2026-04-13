@@ -80,22 +80,36 @@ public class PlayerMovementHandler : MonoBehaviour
 
         if (clickedUnit != null)
         {
-            var selected = PlayerParty.Instance?.SelectedUnit;
+            var selected    = PlayerParty.Instance?.SelectedUnit;
+            var pendingCard = HandDisplay.Instance?.SelectedCard;
+
+            if (pendingCard != null)
+            {
+                // Card is selected: clicking any unit tile switches the acting unit
+                // without entering move mode. Re-set the pending card so the attack
+                // pattern re-anchors on the newly selected unit.
+                if (clickedUnit != selected)
+                {
+                    ExitMoveMode();
+                    PlayerParty.Instance?.SelectUnit(clickedUnit);
+                    GridInputHandler.Instance?.SetPendingCard(pendingCard.Data);
+                }
+                // Whether same or different unit, do NOT enter move mode.
+                return;
+            }
 
             if (clickedUnit != selected)
             {
-                // Select a different unit — deselect any pending card first.
+                // No card — select a different unit.
                 ExitMoveMode();
-                HandDisplay.Instance?.DeselectCard();
-                GridInputHandler.Instance?.SetPendingCard(null);
                 PlayerParty.Instance?.SelectUnit(clickedUnit);
                 return;
             }
 
-            // Clicked the already-selected unit: toggle move mode.
+            // Clicked the already-selected unit with no card: toggle move mode.
             if (IsInMoveMode)
                 ExitMoveMode();
-            else if (HandDisplay.Instance?.SelectedCard == null)
+            else
                 EnterMoveMode();
             return;
         }
@@ -127,6 +141,17 @@ public class PlayerMovementHandler : MonoBehaviour
         // Show/hide dim zones when hovering over the player tile (without entering move mode).
         if (!IsInMoveMode)
         {
+            // Never show movement preview while a card is selected.
+            if (HandDisplay.Instance?.SelectedCard != null)
+            {
+                if (_reachable != null)
+                {
+                    GridManager.Instance.ClearAllPlayerMoves();
+                    _reachable = null;
+                }
+                return;
+            }
+
             var player = PlayerParty.Instance?.SelectedUnit;
             if (player == null) return;
 

@@ -39,11 +39,10 @@ public class CardPlayManager : MonoBehaviour
         CardView selected = _handDisplay?.SelectedCard;
         if (selected == null) return;
 
-        // If the player clicked on a different (non-selected) unit's tile,
-        // let PlayerMovementHandler handle the unit switch — don't consume the click.
+        // If the player clicked any player unit's tile, let PlayerMovementHandler
+        // handle the unit switch — don't consume the click here.
         var entityOnTile = EntityManager.Instance.GetEntityAt(tile.GridPosition);
-        if (entityOnTile is PlayerEntity clickedUnit &&
-            clickedUnit != PlayerParty.Instance?.SelectedUnit)
+        if (entityOnTile is PlayerEntity)
             return;
 
         // A selected unit is required before a card can resolve.
