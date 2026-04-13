@@ -116,6 +116,8 @@ public class PlayerMovementHandler : MonoBehaviour
 
         // ── Movement resolution ───────────────────────────────────────────────
         if (!IsInMoveMode) return;
+        // A selected card always takes priority — exit move mode and let CardPlayManager handle it.
+        if (HandDisplay.Instance?.SelectedCard != null) { ExitMoveMode(); return; }
 
         var player = PlayerParty.Instance?.SelectedUnit;
         if (player == null) return;
