@@ -1,104 +1,73 @@
-using System;
 using UnityEngine;
 
-/// <summary>The player entity on the grid.</summary>
+/// <summary>
+/// One player unit on the grid.
+///
+/// Mana, stamina, and the commander reference live on <see cref="PlayerParty"/>,
+/// which is the shared resource pool for all units.
+///
+/// Instance always points to the currently selected unit; it is set by
+/// PlayerParty.SelectUnit() and should not be assigned anywhere else.
+/// </summary>
 public class PlayerEntity : Entity
 {
-    public static PlayerEntity Instance { get; private set; }
+    /// <summary>The currently selected player unit. Maintained by PlayerParty.</summary>
+    public static PlayerEntity Instance { get; set; }
 
-    public CommanderData commander;
+    // ── Inspector ─────────────────────────────────────────────────────────────
 
-    // ── Inspector-editable values ──────────────────────────────────────────────
+    [Header("Health (fallback when no RunConfig is present)")]
+    [SerializeField] private int _defaultMaxHealth = 10;
 
-    [Header("Health")]
-    [SerializeField] private int _maxHealth = 10;
+    // ── Move speed convenience ────────────────────────────────────────────────
 
-    [Header("Base Resources (per-turn restore values)")]
-    [SerializeField] private int _baseMana      = 3;
-    [SerializeField] private int _baseStamina   = 2;
-    [SerializeField] private int _baseMoveSpeed = 3;
-
-    [Header("Current Resources (runtime — shows live values)")]
-    [SerializeField] private int _currentMana;
-    [SerializeField] private int _currentStamina;
-
-    // ── Static accessors (used by other systems) ───────────────────────────────
-    public static int BaseMana      => Instance != null ? Instance._baseMana      : 3;
-    public static int BaseStamina   => Instance != null ? Instance._baseStamina   : 2;
-    public static int BaseMoveSpeed => Instance != null ? Instance._baseMoveSpeed : 3;
-
-    // ── Current resource properties ────────────────────────────────────────────
-    public int CurrentMana    => _currentMana;
-    public int CurrentStamina => _currentStamina;
-    public int MoveSpeed      => _baseMoveSpeed;
-
-    /// <summary>Fired whenever mana or stamina changes.</summary>
-    public event Action OnResourcesChanged;
-
-    // ── Status Effects (placeholder for future use) ────────────────────────────
-    // StatusEffect list will go here when implemented.
+    /// <summary>Base move speed, read from PlayerParty (shared resource).</summary>
+    public int MoveSpeed => PlayerParty.Instance != null
+        ? PlayerParty.BaseMoveSpeed
+        : 3;
 
     // ── Unity lifecycle ───────────────────────────────────────────────────────
 
     protected override void Awake()
     {
-        Instance      = this;
-        maxHealth     = _maxHealth;
+        // maxHealth / currentHealth are set by EntityManager via InitHealth()
+        // before this entity is used in combat.  Apply a safe default so the
+        // stats label isn't blank if the unit is inspected before InitHealth runs.
+        maxHealth     = _defaultMaxHealth;
         currentHealth = maxHealth;
         base.Awake();
     }
 
-    // ── Resource API ──────────────────────────────────────────────────────────
-
-    /// <summary>Restore full mana and stamina (call at end of player turn / battle start).</summary>
-    public void RefreshResources()
-    {
-        _currentMana    = _baseMana;
-        _currentStamina = _baseStamina;
-        OnResourcesChanged?.Invoke();
-    }
-
-    /// <summary>Spends mana. Returns false (and spends nothing) if insufficient.</summary>
-    public bool TrySpendMana(int amount)
-    {
-        if (_currentMana < amount) return false;
-        _currentMana -= amount;
-        OnResourcesChanged?.Invoke();
-        return true;
-    }
-
-    /// <summary>Spends stamina. Returns false (and spends nothing) if insufficient.</summary>
-    public bool TrySpendStamina(int amount)
-    {
-        if (_currentStamina < amount) return false;
-        _currentStamina -= amount;
-        OnResourcesChanged?.Invoke();
-        return true;
-    }
+    // ── Initialisation ────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Apply a stat bonus from the Commander's passive effects.
-    /// Call at battle start before RefreshResources so base values are correct.
+    /// Called by EntityManager right after spawning.
+    /// Sets the unit's max HP and restores it to its persisted current HP.
     /// </summary>
-    public void ApplyStatBonus(StatModifierType stat, int value)
+    public void InitHealth(int currentHp, int maxHp)
     {
-        switch (stat)
-        {
-            case StatModifierType.MaxMana:
-                _baseMana += value;
-                break;
-            case StatModifierType.MaxStamina:
-                _baseStamina += value;
-                break;
-            case StatModifierType.MaxHealth:
-                maxHealth     += value;
-                currentHealth  = Mathf.Min(currentHealth + value, maxHealth);
-                RefreshStatsLabel();
-                break;
-            case StatModifierType.MoveSpeed:
-                _baseMoveSpeed += value;
-                break;
-        }
-        OnResourcesChanged?.Invoke();
+        maxHealth     = maxHp;
+        currentHealth = Mathf.Clamp(currentHp, 0, maxHp);
+        RefreshStatsLabel();
+    }
+
+    // ── Selection visual ──────────────────────────────────────────────────────
+
+    /// <summary>Tint the sprite to indicate selection state.</summary>
+    public void SetSelected(bool selected)
+    {
+        var sr = GetComponent<SpriteRenderer>();
+        if (sr != null)
+            sr.color = selected ? new Color(0.6f, 1f, 0.6f) : Color.white;
+    }
+
+    // ── Stat bonuses (called by PlayerParty on behalf of Commander) ────────────
+
+    /// <summary>Apply a max-health bonus to this unit only.</summary>
+    public void ApplyMaxHealthBonus(int value)
+    {
+        maxHealth     += value;
+        currentHealth  = Mathf.Min(currentHealth + value, maxHealth);
+        RefreshStatsLabel();
     }
 }

@@ -50,7 +50,7 @@ public class CommanderView : MonoBehaviour, IPointerClickHandler
 
     private void Refresh()
     {
-        _commander = PlayerEntity.Instance?.commander;
+        _commander = PlayerParty.Instance?.Commander;
 
         if (_commander == null)
         {

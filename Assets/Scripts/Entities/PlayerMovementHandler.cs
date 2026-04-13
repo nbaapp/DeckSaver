@@ -73,12 +73,26 @@ public class PlayerMovementHandler : MonoBehaviour
     {
         if (TurnManager.Instance?.CurrentPhase != TurnPhase.PlayerTurn) return;
 
-        var player = PlayerEntity.Instance;
-        if (player == null) return;
+        // ── Unit selection ────────────────────────────────────────────────────
+        // Check whether the clicked tile contains any player unit.
+        var entity      = EntityManager.Instance.GetEntityAt(tile.GridPosition);
+        var clickedUnit = entity as PlayerEntity;
 
-        // Clicking the player's own tile: toggle move mode.
-        if (tile.GridPosition == player.GridPosition)
+        if (clickedUnit != null)
         {
+            var selected = PlayerParty.Instance?.SelectedUnit;
+
+            if (clickedUnit != selected)
+            {
+                // Select a different unit — deselect any pending card first.
+                ExitMoveMode();
+                HandDisplay.Instance?.DeselectCard();
+                GridInputHandler.Instance?.SetPendingCard(null);
+                PlayerParty.Instance?.SelectUnit(clickedUnit);
+                return;
+            }
+
+            // Clicked the already-selected unit: toggle move mode.
             if (IsInMoveMode)
                 ExitMoveMode();
             else if (HandDisplay.Instance?.SelectedCard == null)
@@ -86,13 +100,16 @@ public class PlayerMovementHandler : MonoBehaviour
             return;
         }
 
+        // ── Movement resolution ───────────────────────────────────────────────
         if (!IsInMoveMode) return;
 
-        // Clicking a reachable tile: execute movement.
+        var player = PlayerParty.Instance?.SelectedUnit;
+        if (player == null) return;
+
         if (_reachable != null && _reachable.TryGetValue(tile.GridPosition, out var info))
         {
             int staminaCost = StaminaCostFor(info.dist);
-            if (player.TrySpendStamina(staminaCost))
+            if (PlayerParty.Instance.TrySpendStamina(staminaCost))
             {
                 List<Vector2Int> path = BuildPath(tile.GridPosition);
                 ExitMoveMode();
@@ -101,7 +118,6 @@ public class PlayerMovementHandler : MonoBehaviour
         }
         else
         {
-            // Clicked off-range: exit move mode.
             ExitMoveMode();
         }
     }
@@ -111,7 +127,7 @@ public class PlayerMovementHandler : MonoBehaviour
         // Show/hide dim zones when hovering over the player tile (without entering move mode).
         if (!IsInMoveMode)
         {
-            var player = PlayerEntity.Instance;
+            var player = PlayerParty.Instance?.SelectedUnit;
             if (player == null) return;
 
             if (tile != null && tile.GridPosition == player.GridPosition)
@@ -139,7 +155,7 @@ public class PlayerMovementHandler : MonoBehaviour
 
         // Trace path from tile back to player and paint each tile the bright
         // version of its zone colour (blue / yellow / orange).
-        var player2 = PlayerEntity.Instance;
+        var player2 = PlayerParty.Instance?.SelectedUnit;
         int speed2  = player2 != null ? player2.GetEffectiveMoveSpeed(player2.MoveSpeed) : 3;
 
         List<Vector2Int> path = BuildPath(tile.GridPosition);
@@ -166,11 +182,11 @@ public class PlayerMovementHandler : MonoBehaviour
 
     private void ComputeReachable()
     {
-        var player    = PlayerEntity.Instance;
+        var player  = PlayerParty.Instance?.SelectedUnit;
         if (player == null) { _reachable = null; return; }
 
-        int stamina   = player.CurrentStamina;
-        int speed     = player.GetEffectiveMoveSpeed(player.MoveSpeed);
+        int stamina = PlayerParty.Instance?.CurrentStamina ?? 0;
+        int speed   = player.GetEffectiveMoveSpeed(player.MoveSpeed);
         int maxDist   = stamina * speed; // max tiles reachable
 
         _reachable = new Dictionary<Vector2Int, (int, Vector2Int)>();
@@ -225,7 +241,7 @@ public class PlayerMovementHandler : MonoBehaviour
     {
         if (_reachable == null) return;
 
-        var player = PlayerEntity.Instance;
+        var player = PlayerParty.Instance?.SelectedUnit;
         if (player == null) return;
 
         int speed = player.GetEffectiveMoveSpeed(player.MoveSpeed);
@@ -246,7 +262,7 @@ public class PlayerMovementHandler : MonoBehaviour
     private void ClearPath()
     {
         // Restore each path tile back to its zone colour (not None).
-        var player = PlayerEntity.Instance;
+        var player = PlayerParty.Instance?.SelectedUnit;
         int speed  = player != null ? player.GetEffectiveMoveSpeed(player.MoveSpeed) : 3;
 
         foreach (var t in _pathTiles)
@@ -275,7 +291,7 @@ public class PlayerMovementHandler : MonoBehaviour
         var path = new List<Vector2Int>();
         if (_reachable == null) return path;
 
-        var player = PlayerEntity.Instance;
+        var player = PlayerParty.Instance?.SelectedUnit;
         if (player == null) return path;
 
         Vector2Int cur = destination;
@@ -306,7 +322,7 @@ public class PlayerMovementHandler : MonoBehaviour
     /// <summary>How much stamina does a move of <paramref name="dist"/> tiles cost?</summary>
     private static int StaminaCostFor(int dist)
     {
-        var player = PlayerEntity.Instance;
+        var player = PlayerParty.Instance?.SelectedUnit;
         int speed  = player != null ? player.GetEffectiveMoveSpeed(player.MoveSpeed) : 3;
         if (speed <= 0) return dist; // degenerate: 1 stamina per tile
         return Mathf.CeilToInt((float)dist / speed);

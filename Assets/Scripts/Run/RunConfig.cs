@@ -33,6 +33,16 @@ public class RunConfig : ScriptableObject
     [Tooltip("The final boss encounter shown at the end of the post-save section.")]
     public EncounterDefinition postSaveFinalBoss;
 
+    [Header("Units")]
+    [Tooltip("Number of player units at the start of a run.")]
+    public int startingUnitCount = 3;
+
+    [Tooltip("Max HP of each unit. RunState uses this to initialise and cap healing.")]
+    public int unitMaxHealth = 10;
+
+    [Tooltip("HP restored to each surviving unit between battles (0 = none).")]
+    public int betweenBattleHeal = 0;
+
     [Header("Rewards")]
     [Tooltip("Default reward pool used when an encounter has no override.")]
     public RewardPoolData defaultRewardPool;

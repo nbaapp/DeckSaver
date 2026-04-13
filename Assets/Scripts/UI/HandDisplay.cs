@@ -146,11 +146,11 @@ public class HandDisplay : MonoBehaviour
 
     public void RefreshAffordability()
     {
-        var player = PlayerEntity.Instance;
+        var party = PlayerParty.Instance;
         foreach (var view in _views)
         {
             if (view == null || view.Data == null) continue;
-            bool affordable = player == null || player.CurrentMana >= view.Data.ManaCost;
+            bool affordable = party == null || party.CurrentMana >= view.Data.ManaCost;
             view.SetAffordable(affordable);
         }
     }

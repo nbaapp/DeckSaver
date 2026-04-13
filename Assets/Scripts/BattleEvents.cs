@@ -35,6 +35,9 @@ public static class BattleEvents
     /// <summary>Fired when an enemy is killed.</summary>
     public static event Action<EnemyEntity> OnEnemyKilled;
 
+    /// <summary>Fired when a player unit is permanently killed (removed from the run).</summary>
+    public static event Action<PlayerEntity> OnUnitDied;
+
     /// <summary>Fired when a status is applied to the player. Args: type, stacks.</summary>
     public static event Action<StatusType, int> OnPlayerStatusReceived;
 
@@ -50,5 +53,6 @@ public static class BattleEvents
     public static void FirePlayerHit(Entity attacker, int damage)         => OnPlayerHit?.Invoke(attacker, damage);
     public static void FirePlayerDamaged(int net)                         => OnPlayerDamaged?.Invoke(net);
     public static void FireEnemyKilled(EnemyEntity enemy)                 => OnEnemyKilled?.Invoke(enemy);
+    public static void FireUnitDied(PlayerEntity unit)                    => OnUnitDied?.Invoke(unit);
     public static void FirePlayerStatusReceived(StatusType t, int stacks) => OnPlayerStatusReceived?.Invoke(t, stacks);
 }

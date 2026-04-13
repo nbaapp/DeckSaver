@@ -292,20 +292,20 @@ public class EnemyEntity : Entity, IPointerEnterHandler, IPointerExitHandler
     /// </summary>
     private Vector2Int ChooseLandingPosition(EnemyAttack attack, int steps)
     {
-        var player = PlayerEntity.Instance;
-        if (player == null) return GridPosition;
+        var nearestPlayer = EntityManager.Instance.NearestPlayerTo(GridPosition);
+        if (nearestPlayer == null) return GridPosition;
 
         var reachable = ComputeReachableTiles(steps);
 
         var canHit = reachable
-            .Where(p => CanHitPlayerFrom(p, attack))
+            .Where(p => CanHitAnyPlayerFrom(p, attack))
             .ToList();
 
         if (canHit.Count > 0)
-            return canHit.OrderByDescending(p => Manhattan(p, player.GridPosition)).First();
+            return canHit.OrderByDescending(p => Manhattan(p, nearestPlayer.GridPosition)).First();
 
         return reachable
-            .OrderBy(p => Manhattan(p, player.GridPosition))
+            .OrderBy(p => Manhattan(p, nearestPlayer.GridPosition))
             .First();
     }
 
@@ -345,26 +345,29 @@ public class EnemyEntity : Entity, IPointerEnterHandler, IPointerExitHandler
         Vector2Int.up, Vector2Int.down, Vector2Int.left, Vector2Int.right
     };
 
-    /// <summary>Returns true if this attack can reach the player from <paramref name="pos"/>.</summary>
-    private static bool CanHitPlayerFrom(Vector2Int pos, EnemyAttack attack)
+    /// <summary>Returns true if this attack can reach ANY living player unit from <paramref name="pos"/>.</summary>
+    private static bool CanHitAnyPlayerFrom(Vector2Int pos, EnemyAttack attack)
     {
-        var player = PlayerEntity.Instance;
-        if (player == null) return false;
-        var playerPos = player.GridPosition;
-
-        switch (attack.patternType)
+        foreach (var player in EntityManager.Instance.Players)
         {
-            case EnemyAttackPatternType.RangedSingle:
-            case EnemyAttackPatternType.FixedPattern:
-                return Manhattan(pos, playerPos) <= attack.attackRange;
+            if (player == null) continue;
+            var playerPos = player.GridPosition;
 
-            case EnemyAttackPatternType.DirectionalPattern:
+            switch (attack.patternType)
             {
-                var dir = CardinalDirection(pos, playerPos);
-                foreach (var offset in attack.attackPattern)
-                    if (pos + RotateOffset(offset, dir) == playerPos)
-                        return true;
-                return false;
+                case EnemyAttackPatternType.RangedSingle:
+                case EnemyAttackPatternType.FixedPattern:
+                    if (Manhattan(pos, playerPos) <= attack.attackRange) return true;
+                    break;
+
+                case EnemyAttackPatternType.DirectionalPattern:
+                {
+                    var dir = CardinalDirection(pos, playerPos);
+                    foreach (var offset in attack.attackPattern)
+                        if (pos + RotateOffset(offset, dir) == playerPos)
+                            return true;
+                    break;
+                }
             }
         }
         return false;
@@ -506,9 +509,10 @@ public class EnemyEntity : Entity, IPointerEnterHandler, IPointerExitHandler
         Vector2Int? best     = null;
         int         bestDist = int.MaxValue;
 
-        var player = PlayerEntity.Instance;
-        if (player != null)
+        // Check all living player units
+        foreach (var player in EntityManager.Instance.Players)
         {
+            if (player == null) continue;
             int d = Manhattan(player.GridPosition, fromPos);
             if (d > 0 && d <= range && d < bestDist) { best = player.GridPosition; bestDist = d; }
         }

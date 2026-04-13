@@ -19,6 +19,7 @@ public class BattleUI : MonoBehaviour
     [SerializeField] private Button      _endTurnButton;
     [SerializeField] private TMP_Text    _manaText;
     [SerializeField] private TMP_Text    _staminaText;
+    [SerializeField] private TMP_Text    _unitCountText; // optional
 
     private void Awake()
     {
@@ -45,19 +46,17 @@ public class BattleUI : MonoBehaviour
 
     private IEnumerator InitWithPlayer()
     {
-        // Wait one frame first so all Start() methods (including EntityManager.Start
-        // which spawns enemies) have run before we call StartBattle.
+        // Wait one frame so EntityManager.Start() (which spawns units) has run.
         yield return null;
 
-        while (PlayerEntity.Instance == null)
+        while (PlayerParty.Instance == null || PlayerParty.Instance.SelectedUnit == null)
             yield return null;
 
-        PlayerEntity.Instance.OnResourcesChanged += RefreshResourceDisplay;
+        PlayerParty.Instance.OnResourcesChanged += RefreshResourceDisplay;
+        BattleEvents.OnUnitDied                 += OnUnitDied;
 
-        // Now it's safe to start the battle (resources will fire correctly)
         TurnManager.Instance?.StartBattle();
 
-        // Sync UI immediately after battle starts
         OnPhaseChanged(TurnManager.Instance?.CurrentPhase ?? TurnPhase.None);
         RefreshResourceDisplay();
     }
@@ -66,9 +65,12 @@ public class BattleUI : MonoBehaviour
     {
         if (TurnManager.Instance != null)
             TurnManager.Instance.OnPhaseChanged -= OnPhaseChanged;
-        if (PlayerEntity.Instance != null)
-            PlayerEntity.Instance.OnResourcesChanged -= RefreshResourceDisplay;
+        if (PlayerParty.Instance != null)
+            PlayerParty.Instance.OnResourcesChanged -= RefreshResourceDisplay;
+        BattleEvents.OnUnitDied -= OnUnitDied;
     }
+
+    private void OnUnitDied(PlayerEntity _) => RefreshResourceDisplay();
 
     private void OnEndTurnClicked() => TurnManager.Instance?.EndPlayerTurn();
 
@@ -82,14 +84,18 @@ public class BattleUI : MonoBehaviour
 
     private void RefreshResourceDisplay()
     {
-        var player = PlayerEntity.Instance;
+        var party = PlayerParty.Instance;
         if (_manaText != null)
-            _manaText.text = player != null
-                ? $"Mana  {player.CurrentMana} / {PlayerEntity.BaseMana}"
+            _manaText.text = party != null
+                ? $"Mana  {party.CurrentMana} / {PlayerParty.BaseMana}"
                 : "Mana  - / -";
         if (_staminaText != null)
-            _staminaText.text = player != null
-                ? $"Stamina  {player.CurrentStamina} / {PlayerEntity.BaseStamina}"
+            _staminaText.text = party != null
+                ? $"Stamina  {party.CurrentStamina} / {PlayerParty.BaseStamina}"
                 : "Stamina  - / -";
+        if (_unitCountText != null)
+            _unitCountText.text = party != null
+                ? $"Units  {party.Units.Count}"
+                : "Units  -";
     }
 }

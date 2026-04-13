@@ -83,8 +83,8 @@ public class BattleDeck : MonoBehaviour
         _discardPile.Clear();
         _destroyedPile.Clear();
 
-        if (PlayerEntity.Instance != null)
-            PlayerEntity.Instance.commander = commander;
+        // Commander is now owned by PlayerParty (set from RunCarrier at battle start).
+        // Nothing to assign here.
 
         _drawPile.AddRange(cards);
         Shuffle(_drawPile);

@@ -18,6 +18,9 @@ public enum TurnPhase { None, EnemySelect, PlayerTurn, EnemyExecute }
 ///
 /// Resources (mana/stamina) are restored at the END of the player turn
 /// so that end-of-turn effects can modify next-turn values before they take effect.
+///
+/// With multiple player units, all units participate in start/end-of-turn
+/// processing.  The battle is lost when ALL player units have been killed.
 /// </summary>
 public class TurnManager : MonoBehaviour
 {
@@ -42,7 +45,7 @@ public class TurnManager : MonoBehaviour
     {
         // Fire battle start first so stat bonuses are applied before resource refresh.
         BattleEvents.FireBattleStart();
-        PlayerEntity.Instance?.RefreshResources();
+        PlayerParty.Instance?.RefreshResources();
         StartEnemySelectPhase();
     }
 
@@ -54,11 +57,12 @@ public class TurnManager : MonoBehaviour
         // Clear any pending card preview
         GridInputHandler.Instance?.SetPendingCard(null);
 
-        // Restore resources immediately so end-of-turn effects can read/modify them
-        PlayerEntity.Instance?.RefreshResources();
+        // Restore shared resources
+        PlayerParty.Instance?.RefreshResources();
 
-        // Tick player statuses after resources are set (end-of-turn decay)
-        StatusResolver.TickEndOfTurn(PlayerEntity.Instance);
+        // Tick end-of-turn statuses on all living units
+        foreach (var unit in EntityManager.Instance.Players.ToList())
+            StatusResolver.TickEndOfTurn(unit);
 
         // Draw / discard to hand size
         BattleDeck.Instance?.OnTurnEnd();
@@ -75,22 +79,34 @@ public class TurnManager : MonoBehaviour
         foreach (var enemy in EntityManager.Instance.Enemies.ToList())
             enemy.SelectAttack();
 
-        // Telegraph phase is instant for now; immediately hand off to player
         StartPlayerTurn();
     }
 
     private void StartPlayerTurn()
     {
         SetPhase(TurnPhase.PlayerTurn);
-        var player = PlayerEntity.Instance;
-        player?.ClearBlock();
-        StatusResolver.ResolveStartOfTurn(player);  // Poison / Burn
+
+        // Apply start-of-turn effects to all living units
+        var players = EntityManager.Instance.Players.ToList();
+        foreach (var unit in players)
+        {
+            unit.ClearBlock();
+            StatusResolver.ResolveStartOfTurn(unit); // Poison / Burn ticks
+        }
+
         BattleEvents.FirePlayerTurnStart();
 
-        if (player != null && player.HasStatus(StatusType.Stunned))
+        // Check if every unit is stunned — if so, auto-skip the turn.
+        // Units that are stunned but not in an all-stunned state have their
+        // stun decremented here so they recover on the next turn.
+        bool allStunned = players.Count > 0 && players.All(u => u.HasStatus(StatusType.Stunned));
+        foreach (var unit in players)
+            if (unit.HasStatus(StatusType.Stunned))
+                unit.DecrementStatus(StatusType.Stunned);
+
+        if (allStunned)
         {
-            Debug.Log("[TurnManager] Player is stunned — skipping turn.");
-            player.DecrementStatus(StatusType.Stunned);
+            Debug.Log("[TurnManager] All units stunned — skipping turn.");
             EndPlayerTurn();
             return;
         }
@@ -135,6 +151,17 @@ public class TurnManager : MonoBehaviour
     private bool CheckWin()
     {
         if (EntityManager.Instance.Enemies.Count > 0) return false;
+
+        // Persist surviving unit HPs to RunState so health carries into the next battle.
+        var run = RunCarrier.CurrentRun;
+        if (run != null)
+        {
+            var healths = EntityManager.Instance.Players
+                .Select(p => p.currentHealth)
+                .ToList();
+            run.RecordBattleUnitHealth(healths);
+        }
+
         Debug.Log("[TurnManager] All enemies defeated — Battle Won!");
         SetPhase(TurnPhase.None);
         BattleDeck.Instance?.OnBattleEnd();
@@ -144,9 +171,8 @@ public class TurnManager : MonoBehaviour
 
     private bool CheckLoss()
     {
-        var p = PlayerEntity.Instance;
-        if (p == null || p.currentHealth > 0) return false;
-        Debug.Log("[TurnManager] Player defeated — Battle Lost!");
+        if (EntityManager.Instance.Players.Count > 0) return false;
+        Debug.Log("[TurnManager] All units defeated — Battle Lost!");
         SetPhase(TurnPhase.None);
         BattleDeck.Instance?.OnBattleEnd();
         EndBattle(BattleResultCarrier.Result.Loss);
@@ -157,8 +183,6 @@ public class TurnManager : MonoBehaviour
     {
         BattleResultCarrier.Set(result);
 
-        // If we're in a run, return to the Run scene.
-        // If there's no active run (e.g. standalone test), just stay in the scene.
         if (RunCarrier.CurrentRun != null)
             SceneManager.LoadScene(_runSceneName);
     }

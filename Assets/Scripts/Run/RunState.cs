@@ -46,6 +46,17 @@ public class RunState
     // ── Active boons ──────────────────────────────────────────────────────────
     public List<BoonData> ActiveBoons { get; } = new();
 
+    // ── Unit health (persists across battles) ─────────────────────────────────
+    /// <summary>
+    /// Current HP of each surviving unit, in spawn order.
+    /// Initialised to unitMaxHealth for each unit at run start.
+    /// Updated after each won battle; units that die are removed permanently.
+    /// Count == number of living units remaining.
+    /// </summary>
+    public List<int> UnitHealths { get; } = new();
+
+    public int UnitCount => UnitHealths.Count;
+
     // ── Pre-computed encounter sequence ──────────────────────────────────────
     // Shuffled at segment start; rebuilt after each boss.
     private List<EncounterDefinition> _segmentSequence = new();
@@ -59,6 +70,10 @@ public class RunState
 
         // Copy card references (originals untouched during swaps)
         CurrentCards.AddRange(deck.cards);
+
+        // Initialise unit health for each starting unit
+        for (int i = 0; i < config.startingUnitCount; i++)
+            UnitHealths.Add(config.unitMaxHealth);
 
         BuildSegmentSequence();
     }
@@ -247,6 +262,29 @@ public class RunState
         var frag = CurrentCards[cardIndex].modifierFragment;
         if (frag?.upgradeVersion == null) return;
         SwapModifierFragment(cardIndex, frag.upgradeVersion);
+    }
+
+    // ── Unit health management ────────────────────────────────────────────────
+
+    /// <summary>
+    /// Overwrite UnitHealths with the values from the battle that just ended.
+    /// Pass the currentHealth of each surviving unit in spawn order.
+    /// Dead units (HP == 0) are excluded — they are gone forever.
+    /// </summary>
+    public void RecordBattleUnitHealth(List<int> healthValues)
+    {
+        UnitHealths.Clear();
+        foreach (int hp in healthValues)
+            if (hp > 0)
+                UnitHealths.Add(hp);
+    }
+
+    /// <summary>Heal each surviving unit by <paramref name="amount"/>, capped at unitMaxHealth.</summary>
+    public void HealUnits(int amount)
+    {
+        if (amount <= 0) return;
+        for (int i = 0; i < UnitHealths.Count; i++)
+            UnitHealths[i] = Mathf.Min(UnitHealths[i] + amount, Config.unitMaxHealth);
     }
 
     // ── Boon management ───────────────────────────────────────────────────────

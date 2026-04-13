@@ -90,7 +90,8 @@ public class RunSceneController : MonoBehaviour
 
         if (run.IsPostSave)
         {
-            // Post-save: no rewards, just advance to next encounter
+            // Post-save: no rewards — heal and advance.
+            run.HealUnits(run.Config.betweenBattleHeal);
             run.AdvanceEncounter();
             PresentCurrentEncounter();
             return;
@@ -102,6 +103,9 @@ public class RunSceneController : MonoBehaviour
 
         _rewardPanel?.Show(header, options, onChosen: () =>
         {
+            // Heal surviving units after rewards are claimed.
+            run.HealUnits(run.Config.betweenBattleHeal);
+
             if (wasBoss)
                 ShowSavePrompt(run);
             else

@@ -64,7 +64,7 @@ public class BoonManager : MonoBehaviour
         foreach (var boon in _boons)
             foreach (var passive in boon.effects)
                 if (passive.trigger == PassiveTrigger.StatModifier)
-                    PlayerEntity.Instance?.ApplyStatBonus(passive.statType, passive.statValue);
+                    PlayerParty.Instance?.ApplyStatBonus(passive.statType, passive.statValue);
 
         FirePassives(PassiveTrigger.OnBattleStart, null, 0);
     }
@@ -173,13 +173,16 @@ public class BoonManager : MonoBehaviour
     private static List<Entity> ResolveTargets(PassiveTarget targetType, Entity contextEntity)
     {
         var result  = new List<Entity>();
-        var player  = PlayerEntity.Instance;
+        var party   = PlayerParty.Instance;
+        var player  = PlayerEntity.Instance; // selected unit — used for proximity checks
         var enemies = EntityManager.Instance?.Enemies ?? (IReadOnlyList<EnemyEntity>)new List<EnemyEntity>();
 
         switch (targetType)
         {
             case PassiveTarget.Self:
-                if (player != null) result.Add(player);
+                // Self boon effects (heal, block, buffs) apply to all living units.
+                if (party != null)
+                    result.AddRange(party.Units);
                 break;
             case PassiveTarget.AllEnemies:
                 result.AddRange(enemies.Where(e => e != null));
@@ -228,14 +231,14 @@ public class BoonManager : MonoBehaviour
         int value      = valueOverride >= 0 ? valueOverride : effect.baseValue;
         int count      = Mathf.Max(1, effect.hits);
         var statusType = statusTypeOverride != StatusType.None ? statusTypeOverride : effect.statusType;
-        var player     = PlayerEntity.Instance;
+        var attacker = PlayerEntity.Instance; // selected unit is the attacker
 
         switch (effect.type)
         {
             case EffectType.Strike:
                 for (int i = 0; i < count; i++)
-                    StatusResolver.ApplyStrike(player, target,
-                        player?.GridPosition ?? Vector2Int.zero, value, out _);
+                    StatusResolver.ApplyStrike(attacker, target,
+                        attacker?.GridPosition ?? Vector2Int.zero, value, out _);
                 break;
             case EffectType.Block:
                 for (int i = 0; i < count; i++)

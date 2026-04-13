@@ -39,6 +39,16 @@ public class CardPlayManager : MonoBehaviour
         CardView selected = _handDisplay?.SelectedCard;
         if (selected == null) return;
 
+        // If the player clicked on a different (non-selected) unit's tile,
+        // let PlayerMovementHandler handle the unit switch — don't consume the click.
+        var entityOnTile = EntityManager.Instance.GetEntityAt(tile.GridPosition);
+        if (entityOnTile is PlayerEntity clickedUnit &&
+            clickedUnit != PlayerParty.Instance?.SelectedUnit)
+            return;
+
+        // A selected unit is required before a card can resolve.
+        if (PlayerParty.Instance?.SelectedUnit == null) return;
+
         CardData card = selected.Data;
         if (card?.modifierFragment == null) return;
 
@@ -50,7 +60,7 @@ public class CardPlayManager : MonoBehaviour
             !affected.Exists(a => a.tile == tile))
             return;
 
-        if (!PlayerEntity.Instance.TrySpendMana(card.ManaCost)) return;
+        if (!PlayerParty.Instance.TrySpendMana(card.ManaCost)) return;
 
         var globalMods = card.modifierFragment.globalModifiers;
         foreach (var effect in card.Effects ?? new List<CardEffect>())
