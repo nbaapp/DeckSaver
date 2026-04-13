@@ -70,9 +70,7 @@ public class GridInputHandler : MonoBehaviour
             RefreshHighlight();
         }
 
-        // Don't fire tile clicks when the pointer is over a UI element (e.g. cards in hand).
-        if (_hoveredTile != null && Mouse.current.leftButton.wasPressedThisFrame &&
-            !UnityEngine.EventSystems.EventSystem.current.IsPointerOverGameObject())
+        if (_hoveredTile != null && Mouse.current.leftButton.wasPressedThisFrame)
             OnTileClicked?.Invoke(_hoveredTile);
     }
 
