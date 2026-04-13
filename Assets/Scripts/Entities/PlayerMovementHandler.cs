@@ -154,18 +154,23 @@ public class PlayerMovementHandler : MonoBehaviour
                 return;
             }
 
-            var player = PlayerParty.Instance?.SelectedUnit;
-            if (player == null) return;
-
-            if (tile != null && tile.GridPosition == player.GridPosition)
+            // Check if the hovered tile contains any player unit (not just the selected one).
+            PlayerEntity hoveredUnit = null;
+            if (tile != null)
             {
-                // Hovering over player — show dim zones as a preview.
-                ComputeReachable();
-                ShowZones();
+                var entity = EntityManager.Instance?.GetEntityAt(tile.GridPosition);
+                hoveredUnit = entity as PlayerEntity;
+            }
+
+            if (hoveredUnit != null)
+            {
+                // Hovering over any player unit — show their dim movement zones as a preview.
+                ComputeReachable(hoveredUnit);
+                ShowZones(hoveredUnit);
             }
             else
             {
-                // Moved off player tile — clear preview if we had one.
+                // Moved off a player tile — clear preview if we had one.
                 if (_reachable != null)
                 {
                     GridManager.Instance.ClearAllPlayerMoves();
@@ -207,14 +212,16 @@ public class PlayerMovementHandler : MonoBehaviour
 
     // ── BFS ──────────────────────────────────────────────────────────────────
 
-    private void ComputeReachable()
+    private void ComputeReachable(PlayerEntity player = null)
     {
-        var player  = PlayerParty.Instance?.SelectedUnit;
+        player ??= PlayerParty.Instance?.SelectedUnit;
         if (player == null) { _reachable = null; return; }
 
+        // For preview of non-selected units, show their full potential range using
+        // current party stamina (all units share the same stamina pool).
         int stamina = PlayerParty.Instance?.CurrentStamina ?? 0;
         int speed   = player.GetEffectiveMoveSpeed(player.MoveSpeed);
-        int maxDist   = stamina * speed; // max tiles reachable
+        int maxDist = stamina * speed; // max tiles reachable
 
         _reachable = new Dictionary<Vector2Int, (int, Vector2Int)>();
 
@@ -264,11 +271,11 @@ public class PlayerMovementHandler : MonoBehaviour
 
     // ── Visualisation ─────────────────────────────────────────────────────────
 
-    private void ShowZones()
+    private void ShowZones(PlayerEntity player = null)
     {
         if (_reachable == null) return;
 
-        var player = PlayerParty.Instance?.SelectedUnit;
+        player ??= PlayerParty.Instance?.SelectedUnit;
         if (player == null) return;
 
         int speed = player.GetEffectiveMoveSpeed(player.MoveSpeed);
