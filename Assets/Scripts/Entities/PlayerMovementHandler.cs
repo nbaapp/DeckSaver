@@ -108,7 +108,10 @@ public class PlayerMovementHandler : MonoBehaviour
 
             // Clicked the already-selected unit with no card: toggle move mode.
             if (IsInMoveMode)
+            {
                 ExitMoveMode();
+                PlayerParty.Instance?.SelectUnit(null); // fully deselect — no unit carries over
+            }
             else
                 EnterMoveMode();
             return;
