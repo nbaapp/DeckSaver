@@ -98,22 +98,19 @@ public class PlayerMovementHandler : MonoBehaviour
                 return;
             }
 
-            if (clickedUnit != selected)
+            // No card selected: one click always enters move mode for the clicked unit.
+            // A second click on the same unit in move mode cancels and fully deselects.
+            if (IsInMoveMode && clickedUnit == selected)
             {
-                // No card — select a different unit.
                 ExitMoveMode();
-                PlayerParty.Instance?.SelectUnit(clickedUnit);
+                PlayerParty.Instance?.SelectUnit(null);
                 return;
             }
 
-            // Clicked the already-selected unit with no card: toggle move mode.
-            if (IsInMoveMode)
-            {
-                ExitMoveMode();
-                PlayerParty.Instance?.SelectUnit(null); // fully deselect — no unit carries over
-            }
-            else
-                EnterMoveMode();
+            // Different unit or not yet in move mode — switch to it and enter move mode.
+            ExitMoveMode();
+            PlayerParty.Instance?.SelectUnit(clickedUnit);
+            EnterMoveMode();
             return;
         }
 
