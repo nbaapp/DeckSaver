@@ -35,6 +35,10 @@ public class GridInputHandler : MonoBehaviour
     private CardData      _pendingCard;
     private CommanderData _pendingCommanderActive;
     private Vector2Int    _currentDir = Vector2Int.right;
+    private bool          _awaitingUnit; // card chosen but no unit picked yet
+
+    /// <summary>True while a card is selected but the player hasn't yet chosen which unit will use it.</summary>
+    public bool IsAwaitingUnit => _awaitingUnit;
 
     // Abstractions so Update/RefreshHighlight work for both cards and commander active
     private ModifierFragmentData PendingModifier    => _pendingCard?.modifierFragment ?? _pendingCommanderActive?.activeArea;
@@ -82,11 +86,27 @@ public class GridInputHandler : MonoBehaviour
     /// <summary>
     /// Set the card whose area will be previewed on the grid.
     /// Pass null to clear the preview and return to plain tile hover.
+    /// Calling this directly shows the attack pattern immediately (unit already chosen).
     /// </summary>
     public void SetPendingCard(CardData card)
     {
         _pendingCard            = card;
         _pendingCommanderActive = null;
+        _awaitingUnit           = false;
+        _currentDir             = Vector2Int.right;
+        RefreshHighlight();
+    }
+
+    /// <summary>
+    /// Card selected but no unit chosen yet. Highlights player units as selectable
+    /// actors instead of showing the attack pattern. Call SetPendingCard() once the
+    /// player picks a unit to transition to attack-pattern mode.
+    /// </summary>
+    public void SetPendingCardAwaitingUnit(CardData card)
+    {
+        _pendingCard            = card;
+        _pendingCommanderActive = null;
+        _awaitingUnit           = true;
         _currentDir             = Vector2Int.right;
         RefreshHighlight();
     }
@@ -199,6 +219,18 @@ public class GridInputHandler : MonoBehaviour
     private void RefreshHighlight()
     {
         GridManager.Instance.ResetAllTiles();
+
+        // While waiting for unit selection, highlight all valid player units instead
+        // of showing the attack pattern. The pattern only appears after a unit is picked.
+        if (_awaitingUnit && _pendingCard != null)
+        {
+            var party = PlayerParty.Instance;
+            if (party != null)
+                foreach (var unit in party.Units)
+                    GridManager.Instance.GetTile(unit.GridPosition)
+                        ?.SetState(TileVisualState.Highlighted);
+            return;
+        }
 
         var mod = PendingModifier;
         if (mod == null) return;

@@ -129,9 +129,11 @@ public class HandDisplay : MonoBehaviour
         if (!wasSelected)
         {
             PlayerMovementHandler.Instance?.ExitMoveMode(); // selecting a card exits move mode
+            PlayerParty.Instance?.SelectUnit(null);         // clear any unit selection
             _selectedCard = card;
             card.SetSelected(true);
-            GridInputHandler.Instance?.SetPendingCard(card.Data);
+            // Enter "awaiting unit" mode — highlights units, no attack pattern yet.
+            GridInputHandler.Instance?.SetPendingCardAwaitingUnit(card.Data);
         }
     }
 

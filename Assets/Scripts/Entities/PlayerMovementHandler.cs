@@ -85,16 +85,11 @@ public class PlayerMovementHandler : MonoBehaviour
 
             if (pendingCard != null)
             {
-                // Card is selected: clicking any unit tile switches the acting unit
-                // without entering move mode. Re-set the pending card so the attack
-                // pattern re-anchors on the newly selected unit.
-                if (clickedUnit != selected)
-                {
-                    ExitMoveMode();
-                    PlayerParty.Instance?.SelectUnit(clickedUnit);
-                    GridInputHandler.Instance?.SetPendingCard(pendingCard.Data);
-                }
-                // Whether same or different unit, do NOT enter move mode.
+                // Card is selected: clicking any unit tile picks that unit as the actor
+                // and transitions from "awaiting unit" to "aiming" (attack pattern shown).
+                ExitMoveMode();
+                PlayerParty.Instance?.SelectUnit(clickedUnit);
+                GridInputHandler.Instance?.SetPendingCard(pendingCard.Data);
                 return;
             }
 
