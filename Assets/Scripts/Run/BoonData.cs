@@ -13,6 +13,9 @@ public class BoonData : ScriptableObject
     [TextArea] public string description;
     public Sprite icon;
 
+    [Tooltip("Gold cost when this boon appears in a shop. 0 = not for sale.")]
+    public int shopPrice = 0;
+
     [Tooltip("Passive effects applied for the remainder of the run.")]
     public List<PassiveEffect> effects = new();
 }

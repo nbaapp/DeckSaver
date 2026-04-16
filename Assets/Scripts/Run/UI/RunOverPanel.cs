@@ -18,7 +18,7 @@ public class RunOverPanel : MonoBehaviour
     private void Awake() =>
         _returnButton?.onClick.AddListener(() => _onReturn?.Invoke());
 
-    public void Show(bool won, int segmentsCleared, int boonsEarned, Action onReturn)
+    public void Show(bool won, int nodesVisited, int boonsEarned, Action onReturn)
     {
         _onReturn = onReturn;
         gameObject.SetActive(true);
@@ -28,7 +28,7 @@ public class RunOverPanel : MonoBehaviour
 
         if (_summaryText)
             _summaryText.text =
-                $"Segments cleared: {segmentsCleared}\n" +
+                $"Nodes visited: {nodesVisited}\n" +
                 $"Boons earned: {boonsEarned}";
     }
 

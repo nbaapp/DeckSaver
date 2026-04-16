@@ -87,7 +87,7 @@ public class EntityManager : MonoBehaviour
         var run = RunCarrier.CurrentRun;
         if (run != null)
         {
-            var encounter = run.CurrentEncounter();
+            var encounter = run.Map.CurrentNode?.Encounter;
             if (encounter != null)
                 enemySpawns = encounter.enemySpawns;
         }

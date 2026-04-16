@@ -1,44 +1,46 @@
+using System;
+using System.Collections.Generic;
+using TMPro;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
 /// <summary>
-/// Drives the Run scene — the hub between battles.
-/// This scene is loaded after each battle (win or loss) and at the start of a run.
+/// Drives the Run scene — the space between battles where the player navigates the map.
 ///
-/// Flow:
-///   Fresh run  → first encounter → load Battle scene
-///   Battle won → reward panel (unless post-save) → advance → next encounter
-///   Boss beaten → reward panel → save prompt → (save or continue)
-///   Battle lost → run over panel → return to Hub
+/// Flow each time this scene loads:
+///   Fresh run  → show map (map was generated when RunState was created)
+///   Battle won → give node rewards → show map
+///   Boss won   → give boss rewards → show run-complete panel
+///   Battle lost → show run-over panel
+///
+/// Non-combat nodes (Camp, Shop, Event) are handled entirely within this scene:
+/// the map hides, the relevant panel shows, and when the player leaves the map
+/// is shown again.
 ///
 /// === Scene Setup ===
 /// 1. Create a "Run" scene and add it to Build Settings.
-/// 2. Place a GameObject with this component.
-/// 3. Wire all panel references in the inspector.
-/// 4. The encounter info area (encounter name, enemy count) is populated automatically.
-/// 5. Story content can be placed in this scene freely — the flow will show panels
-///    on top of or alongside whatever scene content you add later.
+/// 2. Place a GameObject with this component and wire all inspector references.
+/// 3. MapView, BoonRewardPanel, FragmentSwapPanel, CampPanel, ShopPanel,
+///    and RunOverPanel should all start hidden (inactive).
 /// </summary>
 public class RunSceneController : MonoBehaviour
 {
     [Header("Scene Names")]
-    [Tooltip("The battle scene to load for combat encounters.")]
     [SerializeField] private string _battleSceneName = "Battle";
-    [Tooltip("The hub scene to load when the run ends.")]
-    [SerializeField] private string _hubSceneName = "Hub";
+    [SerializeField] private string _hubSceneName    = "Hub";
 
     [Header("Panels")]
-    [SerializeField] private RewardPanel    _rewardPanel;
-    [SerializeField] private SavePromptPanel _savePromptPanel;
-    [SerializeField] private RunOverPanel    _runOverPanel;
+    [SerializeField] private MapView          _mapView;
+    [SerializeField] private NodeRewardPanel  _nodeRewardPanel;
+    [SerializeField] private BoonRewardPanel  _boonRewardPanel;
+    [SerializeField] private FragmentSwapPanel _fragmentSwapPanel;
+    [SerializeField] private CampPanel        _campPanel;
+    [SerializeField] private ShopPanel        _shopPanel;
+    [SerializeField] private RunOverPanel     _runOverPanel;
 
-    [Header("Encounter Info (optional)")]
-    [Tooltip("Assign a TextMeshProUGUI to display the current encounter name.")]
-    [SerializeField] private TMPro.TextMeshProUGUI _encounterNameText;
-    [Tooltip("Assign a TextMeshProUGUI to display the enemy count.")]
-    [SerializeField] private TMPro.TextMeshProUGUI _enemyCountText;
-    [Tooltip("A button or panel the player clicks to begin the battle. Hide it for reward-only encounters.")]
-    [SerializeField] private UnityEngine.UI.Button _beginEncounterButton;
+    [Header("HUD")]
+    [Tooltip("TextMeshProUGUI to display the player's current gold.")]
+    [SerializeField] private TextMeshProUGUI _moneyText;
 
     // ── Lifecycle ─────────────────────────────────────────────────────────────
 
@@ -57,11 +59,13 @@ public class RunSceneController : MonoBehaviour
             return;
         }
 
+        UpdateMoneyDisplay();
+
         switch (result)
         {
             case BattleResultCarrier.Result.None:
-                // Fresh run start — head straight to the first encounter
-                PresentCurrentEncounter();
+                // Fresh run — map was generated in RunState constructor
+                ShowMap();
                 break;
 
             case BattleResultCarrier.Result.Win:
@@ -69,135 +73,102 @@ public class RunSceneController : MonoBehaviour
                 break;
 
             case BattleResultCarrier.Result.Loss:
-                HandleBattleLost(run);
+                ShowRunOver(won: false, run);
                 break;
         }
     }
 
-    // ── Win/loss handling ─────────────────────────────────────────────────────
+    // ── Battle result handling ────────────────────────────────────────────────
 
     private void HandleBattleWon(RunState run)
     {
-        bool wasBoss       = run.IsAtBoss;
-        bool wasFinalBoss  = run.IsAtFinalBoss;
-
-        if (wasFinalBoss)
+        var node = run.Map.CurrentNode;
+        if (node == null)
         {
-            // Post-save final boss defeated — run complete
-            ShowRunOver(won: true, run);
+            Debug.LogError("[RunSceneController] CurrentNode is null after a win.");
+            ShowMap();
             return;
         }
 
-        if (run.IsPostSave)
+        // Mark visited and give money
+        run.Map.MarkCurrentNodeVisited();
+        int goldEarned = MoneyForNode(node.Type, run.Config);
+        run.EarnMoney(goldEarned);
+        UpdateMoneyDisplay();
+
+        bool isBoss      = node.Type == NodeType.Boss;
+        bool hasSwap     = node.Type == NodeType.StandardConflict || isBoss;
+        bool hasBoon     = node.Type == NodeType.HardConflict     || isBoss;
+        string header    = isBoss ? "Boss Defeated!" : "Battle Complete";
+
+        _nodeRewardPanel?.Show(header, goldEarned, hasSwap, hasBoon, isBoss, onContinue: () =>
         {
-            // Post-save: no rewards — heal and advance.
-            run.HealUnits(run.Config.betweenBattleHeal);
-            run.AdvanceEncounter();
-            PresentCurrentEncounter();
-            return;
-        }
-
-        // Generate reward options and show the panel
-        var options = run.GenerateRewardOptions(wasBoss);
-        string header = wasBoss ? "Boss Defeated!" : "Encounter Complete";
-
-        _rewardPanel?.Show(header, options, onChosen: () =>
-        {
-            // Heal surviving units after rewards are claimed.
-            run.HealUnits(run.Config.betweenBattleHeal);
-
-            if (wasBoss)
-                ShowSavePrompt(run);
+            if (isBoss)
+                ShowRunOver(won: true, run);
             else
-            {
-                run.AdvanceEncounter();
-                PresentCurrentEncounter();
-            }
+                ShowMap();
         });
     }
 
-    private void HandleBattleLost(RunState run) => ShowRunOver(won: false, run);
+    // ── Map ───────────────────────────────────────────────────────────────────
 
-    // ── Save prompt ───────────────────────────────────────────────────────────
-
-    private void ShowSavePrompt(RunState run)
+    private void ShowMap()
     {
-        if (run.HasSaved)
-        {
-            // Already saved this run (shouldn't normally reach here) — just continue
-            run.StartNextSegment();
-            PresentCurrentEncounter();
-            return;
-        }
+        var run = RunCarrier.CurrentRun;
+        if (run == null) { ReturnToHub(); return; }
 
-        _savePromptPanel?.Show(
-            onSave: () =>
-            {
-                run.Save(); // Enters post-save mode; EncounterIndex reset to 0
-                PresentCurrentEncounter();
-            },
-            onContinue: () =>
-            {
-                run.StartNextSegment();
-                PresentCurrentEncounter();
-            }
-        );
+        UpdateMoneyDisplay();
+        _mapView?.Show(run.Map, run.Config, OnNodeSelected);
     }
 
-    // ── Encounter presentation ────────────────────────────────────────────────
-
-    private void PresentCurrentEncounter()
+    private void OnNodeSelected(MapNode node)
     {
-        var run       = RunCarrier.CurrentRun;
-        var encounter = run?.CurrentEncounter();
+        _mapView?.Hide();
 
-        if (encounter == null)
-        {
-            Debug.LogError("[RunSceneController] CurrentEncounter is null.");
-            ReturnToHub();
-            return;
-        }
+        var run = RunCarrier.CurrentRun;
+        if (run == null) { ReturnToHub(); return; }
 
-        // Update encounter info text
-        if (_encounterNameText)
-            _encounterNameText.text = encounter.encounterName;
+        run.Map.EnterNode(node.Id);
 
-        if (_enemyCountText)
+        switch (node.Type)
         {
-            _enemyCountText.text = encounter.type == EncounterType.Battle
-                ? $"{encounter.enemySpawns.Count} enemies"
-                : "No combat";
-        }
+            case NodeType.Start:
+                // Should never be selectable, but guard just in case
+                ShowMap();
+                return;
 
-        if (encounter.type == EncounterType.RewardOnly)
-        {
-            // Reward-only encounter: skip battle, go straight to reward
-            // The reward pool for this encounter applies as normal
-            var options = run.GenerateRewardOptions(wasBoss: false);
-            _rewardPanel?.Show("Free Reward!", options, onChosen: () =>
-            {
-                run.AdvanceEncounter();
-                PresentCurrentEncounter();
-            });
-        }
-        else
-        {
-            // Normal battle encounter: let player confirm before loading
-            if (_beginEncounterButton != null)
-            {
-                _beginEncounterButton.gameObject.SetActive(true);
-                _beginEncounterButton.onClick.RemoveAllListeners();
-                _beginEncounterButton.onClick.AddListener(LaunchBattle);
-            }
-            else
-            {
-                // No button wired — launch immediately
+            case NodeType.StandardConflict:
+            case NodeType.HardConflict:
+            case NodeType.Boss:
                 LaunchBattle();
-            }
+                break;
+
+            case NodeType.Camp:
+                _campPanel?.Show(() =>
+                {
+                    run.Map.MarkCurrentNodeVisited();
+                    ShowMap();
+                });
+                break;
+
+            case NodeType.Shop:
+                _shopPanel?.Show(() =>
+                {
+                    run.Map.MarkCurrentNodeVisited();
+                    ShowMap();
+                });
+                break;
+
+            case NodeType.Event:
+                // Stub: events are not yet implemented; mark visited and return to map
+                Debug.Log("[RunSceneController] Event node — not yet implemented.");
+                run.Map.MarkCurrentNodeVisited();
+                ShowMap();
+                break;
         }
     }
 
-    // ── Scene loading ─────────────────────────────────────────────────────────
+    // ── Scene transitions ─────────────────────────────────────────────────────
 
     private void LaunchBattle() => SceneManager.LoadScene(_battleSceneName);
 
@@ -212,20 +183,40 @@ public class RunSceneController : MonoBehaviour
     private void ShowRunOver(bool won, RunState run)
     {
         _runOverPanel?.Show(
-            won:             won,
-            segmentsCleared: run.Segment,
-            boonsEarned:     run.ActiveBoons.Count,
-            onReturn:        ReturnToHub
+            won:          won,
+            nodesVisited: run.Map.VisitedCount,
+            boonsEarned:  run.ActiveBoons.Count,
+            onReturn:     ReturnToHub
         );
+    }
+
+    // ── HUD ───────────────────────────────────────────────────────────────────
+
+    private void UpdateMoneyDisplay()
+    {
+        var run = RunCarrier.CurrentRun;
+        if (_moneyText && run != null)
+            _moneyText.text = $"Gold: {run.Money}";
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private void HideAllPanels()
     {
-        _rewardPanel?.Hide();
-        _savePromptPanel?.Hide();
+        _mapView?.Hide();
+        _nodeRewardPanel?.Hide();
+        _boonRewardPanel?.Hide();
+        _fragmentSwapPanel?.Hide();
+        _campPanel?.Hide();
+        _shopPanel?.Hide();
         _runOverPanel?.Hide();
-        _beginEncounterButton?.gameObject.SetActive(false);
     }
+
+    private static int MoneyForNode(NodeType type, RunConfig config) => type switch
+    {
+        NodeType.StandardConflict => config.moneyPerStandard,
+        NodeType.HardConflict     => config.moneyPerHard,
+        NodeType.Boss             => config.moneyPerBoss,
+        _                         => 0,
+    };
 }

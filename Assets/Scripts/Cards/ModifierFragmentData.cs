@@ -30,6 +30,11 @@ public class ModifierFragmentData : ScriptableObject
     [Tooltip("Tiles to move when movesPlayer is true.")]
     public int moveDistance = 1;
 
+    // ── Shop ──────────────────────────────────────────────────────────────────
+    [Header("Shop")]
+    [Tooltip("Gold cost when this fragment appears in a shop. 0 = not for sale.")]
+    public int shopPrice = 0;
+
     // ── Upgrade chain ─────────────────────────────────────────────────────────
     [Header("Upgrade Chain")]
     [Tooltip("The upgraded version of this fragment. Null if this is already the top tier.")]

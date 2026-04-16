@@ -15,17 +15,25 @@ using TMPro;
 /// All created objects are registered for undo.
 ///
 /// What gets built:
-///   RunScene root
-///     Camera
-///     EventSystem
-///     Canvas
-///       EncounterInfo      — encounter name + enemy count + Begin Battle button
-///       RewardPanel        — boon offer slots + fragment swap button
-///         FragmentSwapPanel
-///           FragmentChoiceRoot  (step 1: pick a fragment)
-///           CardChoiceRoot      (step 2: pick a card in your deck)
-///       SavePromptPanel    — shown after boss defeat
-///       RunOverPanel       — win / loss end screen
+///   Camera, EventSystem
+///   RunScene root (RunSceneController)
+///   Canvas
+///     HUD strip          — gold display
+///     MapView            — full-screen FTL-style map
+///     NodeRewardPanel    — simultaneous reward list after a battle
+///     BoonRewardPanel    — pick a boon (opened from NodeRewardPanel)
+///     CampPanel          — heal, add unit, upgrade fragment
+///     ShopPanel          — buy fragments and boons
+///     FragmentUpgradePanel — opened from Camp; re-used from old design
+///     FragmentSwapPanel  — pick fragment → pick card → preview → confirm
+///     RunOverPanel       — win / loss end screen
+///
+/// Prefabs created (in Assets/Prefabs/):
+///   FragmentSwapCardSlot   — used inside FragmentSwapPanel card list
+///   BoonOfferView          — used inside BoonRewardPanel slot list
+///   ShopSlot               — used inside ShopPanel category columns
+///   MapNode                — spawned by MapView for each node
+///   MapEdge                — spawned by MapView for each edge
 /// </summary>
 public static class RunSceneBuilder
 {
@@ -53,9 +61,9 @@ public static class RunSceneBuilder
             var camGO = CreateGO("Main Camera");
             camGO.tag = "MainCamera";
             var cam = camGO.AddComponent<Camera>();
-            cam.clearFlags       = CameraClearFlags.SolidColor;
-            cam.backgroundColor  = new Color(0.08f, 0.07f, 0.10f, 1f);
-            cam.orthographic     = true;
+            cam.clearFlags      = CameraClearFlags.SolidColor;
+            cam.backgroundColor = new Color(0.08f, 0.07f, 0.10f, 1f);
+            cam.orthographic    = true;
             cam.orthographicSize = 5f;
         }
 
@@ -84,35 +92,246 @@ public static class RunSceneBuilder
         scaler.matchWidthOrHeight  = 0.5f;
         canvasGO.AddComponent<GraphicRaycaster>();
 
-        // ── Encounter Info ────────────────────────────────────────────────────
+        // ── Prefabs ───────────────────────────────────────────────────────────
 
-        var infoRT = Panel("EncounterInfo", canvas.transform,
-            new Vector2(0.3f, 0.35f), new Vector2(0.7f, 0.75f),
-            new Color(0.06f, 0.05f, 0.08f, 0.85f));
+        var cardSlotPrefab     = LoadOrBuildCardSlotPrefab();
+        var boonOfferPrefab    = LoadOrBuildBoonOfferPrefab();
+        var shopSlotPrefab     = LoadOrBuildShopSlotPrefab();
+        var mapNodePrefab      = LoadOrBuildMapNodePrefab();
+        var mapEdgePrefab      = LoadOrBuildMapEdgePrefab();
 
-        var encounterNameTMP = UIText("EncounterName", infoRT,
-            new Vector2(0.05f, 0.72f), new Vector2(0.95f, 0.95f),
-            "Encounter", 22f, bold: true, color: Color.white);
+        // ── MapView ───────────────────────────────────────────────────────────
 
-        var enemyCountTMP = UIText("EnemyCount", infoRT,
-            new Vector2(0.05f, 0.54f), new Vector2(0.95f, 0.72f),
-            "3 enemies", 13f, bold: false, color: new Color(0.75f, 0.75f, 0.75f, 1f));
+        var mapViewRT = Panel("MapView", canvas.transform,
+            Vector2.zero, Vector2.one,
+            new Color(0.06f, 0.05f, 0.08f, 1f));
+        var mapView = mapViewRT.gameObject.AddComponent<MapView>();
 
-        // Begin Battle button (centred, lower third of the info panel)
-        var beginBtnRT = UI("BeginBattleButton", infoRT);
-        beginBtnRT.anchorMin        = new Vector2(0.2f, 0.08f);
-        beginBtnRT.anchorMax        = new Vector2(0.8f, 0.38f);
-        beginBtnRT.offsetMin        = beginBtnRT.offsetMax = Vector2.zero;
-        beginBtnRT.gameObject.AddComponent<Image>().color = new Color(0.12f, 0.40f, 0.12f, 0.92f);
-        var beginBtn = beginBtnRT.gameObject.AddComponent<Button>();
-        UIText("Label", beginBtnRT, Vector2.zero, Vector2.one,
-            "Begin Battle", 16f, bold: true, color: Color.white);
+        // MapArea — inner rect where nodes and edges are drawn
+        var mapAreaRT = UI("MapArea", mapViewRT);
+        mapAreaRT.anchorMin = new Vector2(0.01f, 0.01f);
+        mapAreaRT.anchorMax = new Vector2(0.99f, 0.90f); // leaves room for HUD at top
+        mapAreaRT.offsetMin = mapAreaRT.offsetMax = Vector2.zero;
+
+        SetRef(mapView, "_mapArea",        mapAreaRT);
+        SetRef(mapView, "_nodeViewPrefab", mapNodePrefab);
+        SetRef(mapView, "_edgeViewPrefab", mapEdgePrefab);
+
+        mapViewRT.gameObject.SetActive(false);
+
+        // ── BoonRewardPanel ───────────────────────────────────────────────────
+
+        var boonRewardRT = Panel("BoonRewardPanel", canvas.transform,
+            new Vector2(0.15f, 0.10f), new Vector2(0.85f, 0.95f),
+            new Color(0.06f, 0.05f, 0.10f, 0.97f));
+        var boonRewardPanel = boonRewardRT.gameObject.AddComponent<BoonRewardPanel>();
+
+        var boonHeaderTMP = UIText("Header", boonRewardRT,
+            new Vector2(0.05f, 0.88f), new Vector2(0.95f, 0.97f),
+            "Choose a Boon", 22f, bold: true, color: Color.white);
+
+        // Slot parent: vertical list for spawned BoonOfferView instances
+        var boonSlotParentRT = UI("SlotParent", boonRewardRT);
+        boonSlotParentRT.anchorMin = new Vector2(0.05f, 0.12f);
+        boonSlotParentRT.anchorMax = new Vector2(0.95f, 0.87f);
+        boonSlotParentRT.offsetMin = boonSlotParentRT.offsetMax = Vector2.zero;
+        var boonVLayout = boonSlotParentRT.gameObject.AddComponent<VerticalLayoutGroup>();
+        boonVLayout.spacing                = 12f;
+        boonVLayout.childForceExpandWidth  = true;
+        boonVLayout.childForceExpandHeight = true;
+        boonVLayout.childAlignment         = TextAnchor.UpperCenter;
+
+        // Skip button
+        var boonSkipRT = UI("SkipButton", boonRewardRT);
+        boonSkipRT.anchorMin = new Vector2(0.35f, 0.02f);
+        boonSkipRT.anchorMax = new Vector2(0.65f, 0.10f);
+        boonSkipRT.offsetMin = boonSkipRT.offsetMax = Vector2.zero;
+        boonSkipRT.gameObject.AddComponent<Image>().color = new Color(0.25f, 0.25f, 0.30f, 1f);
+        var boonSkipBtn = boonSkipRT.gameObject.AddComponent<Button>();
+        UIText("Label", boonSkipRT, Vector2.zero, Vector2.one,
+            "Skip", 13f, bold: false, color: Color.white);
+
+        SetRef(boonRewardPanel, "_headerText",    boonHeaderTMP);
+        SetRef(boonRewardPanel, "_boonSlotPrefab", boonOfferPrefab);
+        SetRef(boonRewardPanel, "_slotParent",    boonSlotParentRT);
+        SetRef(boonRewardPanel, "_skipButton",    boonSkipBtn);
+
+        boonRewardRT.gameObject.SetActive(false);
+
+        // ── NodeRewardPanel ───────────────────────────────────────────────────
+
+        var nodeRewardRT = Panel("NodeRewardPanel", canvas.transform,
+            new Vector2(0.20f, 0.15f), new Vector2(0.80f, 0.90f),
+            new Color(0.05f, 0.05f, 0.10f, 0.97f));
+        var nodeRewardPanel = nodeRewardRT.gameObject.AddComponent<NodeRewardPanel>();
+
+        var nodeRewardHeaderTMP = UIText("Header", nodeRewardRT,
+            new Vector2(0.05f, 0.88f), new Vector2(0.95f, 0.97f),
+            "Battle Complete", 22f, bold: true, color: Color.white);
+
+        var nodeGoldTMP = UIText("GoldText", nodeRewardRT,
+            new Vector2(0.05f, 0.80f), new Vector2(0.95f, 0.89f),
+            "+0 Gold", 16f, bold: false, color: new Color(1f, 0.85f, 0.3f, 1f));
+
+        // Fragment Swap row
+        var swapRowGO = CreateChild("SwapRow", nodeRewardRT);
+        var swapRowRT = swapRowGO.AddComponent<RectTransform>();
+        swapRowRT.anchorMin = new Vector2(0.04f, 0.62f);
+        swapRowRT.anchorMax = new Vector2(0.96f, 0.78f);
+        swapRowRT.offsetMin = swapRowRT.offsetMax = Vector2.zero;
+        swapRowGO.AddComponent<Image>().color = new Color(0.10f, 0.10f, 0.16f, 1f);
+
+        UIText("RowLabel", swapRowRT,
+            new Vector2(0.03f, 0.15f), new Vector2(0.35f, 0.85f),
+            "Fragment Swap", 13f, bold: true, color: Color.white);
+
+        var swapStatusTMP = UIText("StatusText", swapRowRT,
+            new Vector2(0.37f, 0.15f), new Vector2(0.62f, 0.85f),
+            "Available", 12f, bold: false, color: new Color(0.7f, 1f, 0.7f, 1f));
+
+        var swapClaimRT = UI("ClaimButton", swapRowRT);
+        swapClaimRT.anchorMin = new Vector2(0.65f, 0.10f);
+        swapClaimRT.anchorMax = new Vector2(0.97f, 0.90f);
+        swapClaimRT.offsetMin = swapClaimRT.offsetMax = Vector2.zero;
+        swapClaimRT.gameObject.AddComponent<Image>().color = new Color(0.15f, 0.40f, 0.15f, 1f);
+        var swapClaimBtn = swapClaimRT.gameObject.AddComponent<Button>();
+        UIText("Label", swapClaimRT, Vector2.zero, Vector2.one,
+            "Claim", 13f, bold: true, color: Color.white);
+
+        // Boon row
+        var boonRowGO = CreateChild("BoonRow", nodeRewardRT);
+        var boonRowRT = boonRowGO.AddComponent<RectTransform>();
+        boonRowRT.anchorMin = new Vector2(0.04f, 0.42f);
+        boonRowRT.anchorMax = new Vector2(0.96f, 0.58f);
+        boonRowRT.offsetMin = boonRowRT.offsetMax = Vector2.zero;
+        boonRowGO.AddComponent<Image>().color = new Color(0.10f, 0.10f, 0.16f, 1f);
+
+        UIText("RowLabel", boonRowRT,
+            new Vector2(0.03f, 0.15f), new Vector2(0.35f, 0.85f),
+            "Boon", 13f, bold: true, color: Color.white);
+
+        var boonStatusTMP = UIText("StatusText", boonRowRT,
+            new Vector2(0.37f, 0.15f), new Vector2(0.62f, 0.85f),
+            "Available", 12f, bold: false, color: new Color(0.7f, 1f, 0.7f, 1f));
+
+        var boonClaimRT = UI("ClaimButton", boonRowRT);
+        boonClaimRT.anchorMin = new Vector2(0.65f, 0.10f);
+        boonClaimRT.anchorMax = new Vector2(0.97f, 0.90f);
+        boonClaimRT.offsetMin = boonClaimRT.offsetMax = Vector2.zero;
+        boonClaimRT.gameObject.AddComponent<Image>().color = new Color(0.15f, 0.40f, 0.15f, 1f);
+        var boonClaimBtn = boonClaimRT.gameObject.AddComponent<Button>();
+        UIText("Label", boonClaimRT, Vector2.zero, Vector2.one,
+            "Claim", 13f, bold: true, color: Color.white);
+
+        // Continue button
+        var nodeRewardContinueRT = UI("ContinueButton", nodeRewardRT);
+        nodeRewardContinueRT.anchorMin = new Vector2(0.30f, 0.04f);
+        nodeRewardContinueRT.anchorMax = new Vector2(0.70f, 0.14f);
+        nodeRewardContinueRT.offsetMin = nodeRewardContinueRT.offsetMax = Vector2.zero;
+        nodeRewardContinueRT.gameObject.AddComponent<Image>().color = new Color(0.15f, 0.15f, 0.20f, 1f);
+        var nodeRewardContinueBtn = nodeRewardContinueRT.gameObject.AddComponent<Button>();
+        UIText("Label", nodeRewardContinueRT, Vector2.zero, Vector2.one,
+            "Continue", 14f, bold: true, color: Color.white);
+
+        SetRef(nodeRewardPanel, "_headerText",        nodeRewardHeaderTMP);
+        SetRef(nodeRewardPanel, "_goldText",          nodeGoldTMP);
+        SetRef(nodeRewardPanel, "_swapRow",           swapRowGO);
+        SetRef(nodeRewardPanel, "_swapStatusText",    swapStatusTMP);
+        SetRef(nodeRewardPanel, "_swapClaimButton",   swapClaimBtn);
+        SetRef(nodeRewardPanel, "_boonRow",           boonRowGO);
+        SetRef(nodeRewardPanel, "_boonStatusText",    boonStatusTMP);
+        SetRef(nodeRewardPanel, "_boonClaimButton",   boonClaimBtn);
+        SetRef(nodeRewardPanel, "_continueButton",    nodeRewardContinueBtn);
+
+        nodeRewardRT.gameObject.SetActive(false);
+
+        // ── CampPanel ─────────────────────────────────────────────────────────
+
+        var campRT = Panel("CampPanel", canvas.transform,
+            new Vector2(0.20f, 0.10f), new Vector2(0.80f, 0.95f),
+            new Color(0.06f, 0.08f, 0.06f, 0.97f));
+        var campPanel = campRT.gameObject.AddComponent<CampPanel>();
+
+        UIText("Title", campRT,
+            new Vector2(0.05f, 0.87f), new Vector2(0.95f, 0.97f),
+            "Camp", 24f, bold: true, color: Color.white);
+
+        var campMoneyTMP = UIText("MoneyText", campRT,
+            new Vector2(0.05f, 0.80f), new Vector2(0.95f, 0.88f),
+            "Gold: 0", 14f, bold: false, color: new Color(1f, 0.85f, 0.3f, 1f));
+
+        // Option rows
+        var healRow    = BuildCampOptionRow("HealRow",    campRT, new Vector2(0.04f, 0.58f), new Vector2(0.96f, 0.75f));
+        var addRow     = BuildCampOptionRow("AddUnitRow", campRT, new Vector2(0.04f, 0.38f), new Vector2(0.96f, 0.55f));
+        var upgradeRow = BuildCampOptionRow("UpgradeRow", campRT, new Vector2(0.04f, 0.18f), new Vector2(0.96f, 0.35f));
+
+        // Leave button
+        var campLeaveRT = UI("LeaveButton", campRT);
+        campLeaveRT.anchorMin = new Vector2(0.30f, 0.02f);
+        campLeaveRT.anchorMax = new Vector2(0.70f, 0.12f);
+        campLeaveRT.offsetMin = campLeaveRT.offsetMax = Vector2.zero;
+        campLeaveRT.gameObject.AddComponent<Image>().color = new Color(0.15f, 0.15f, 0.20f, 1f);
+        var campLeaveBtn = campLeaveRT.gameObject.AddComponent<Button>();
+        UIText("Label", campLeaveRT, Vector2.zero, Vector2.one,
+            "Leave Camp", 14f, bold: true, color: Color.white);
+
+        SetRef(campPanel, "_healButton",    healRow.btn);
+        SetRef(campPanel, "_healLabel",     healRow.label);
+        SetRef(campPanel, "_addUnitButton", addRow.btn);
+        SetRef(campPanel, "_addUnitLabel",  addRow.label);
+        SetRef(campPanel, "_upgradeButton", upgradeRow.btn);
+        SetRef(campPanel, "_upgradeLabel",  upgradeRow.label);
+        SetRef(campPanel, "_moneyText",     campMoneyTMP);
+        SetRef(campPanel, "_leaveButton",   campLeaveBtn);
+
+        campRT.gameObject.SetActive(false);
+
+        // ── ShopPanel ─────────────────────────────────────────────────────────
+
+        var shopRT = Panel("ShopPanel", canvas.transform,
+            new Vector2(0.05f, 0.05f), new Vector2(0.95f, 0.95f),
+            new Color(0.06f, 0.05f, 0.10f, 0.97f));
+        var shopPanel = shopRT.gameObject.AddComponent<ShopPanel>();
+
+        UIText("Title", shopRT,
+            new Vector2(0.05f, 0.90f), new Vector2(0.95f, 0.97f),
+            "Shop", 24f, bold: true, color: Color.white);
+
+        var shopMoneyTMP = UIText("MoneyText", shopRT,
+            new Vector2(0.05f, 0.84f), new Vector2(0.40f, 0.91f),
+            "Gold: 0", 14f, bold: false, color: new Color(1f, 0.85f, 0.3f, 1f));
+
+        // Three category columns
+        var (effectHeader, effectParent)   = BuildShopColumn("EffectColumn",   shopRT, 0.02f, 0.34f);
+        var (modifierHeader, modifierParent) = BuildShopColumn("ModifierColumn", shopRT, 0.35f, 0.67f);
+        var (boonHeader, boonParent)       = BuildShopColumn("BoonColumn",     shopRT, 0.68f, 0.99f);
+
+        // Leave button
+        var shopLeaveRT = UI("LeaveButton", shopRT);
+        shopLeaveRT.anchorMin = new Vector2(0.35f, 0.01f);
+        shopLeaveRT.anchorMax = new Vector2(0.65f, 0.07f);
+        shopLeaveRT.offsetMin = shopLeaveRT.offsetMax = Vector2.zero;
+        shopLeaveRT.gameObject.AddComponent<Image>().color = new Color(0.15f, 0.15f, 0.20f, 1f);
+        var shopLeaveBtn = shopLeaveRT.gameObject.AddComponent<Button>();
+        UIText("Label", shopLeaveRT, Vector2.zero, Vector2.one,
+            "Leave Shop", 14f, bold: true, color: Color.white);
+
+        SetRef(shopPanel, "_shopSlotPrefab",  shopSlotPrefab);
+        SetRef(shopPanel, "_effectParent",    effectParent);
+        SetRef(shopPanel, "_modifierParent",  modifierParent);
+        SetRef(shopPanel, "_boonParent",      boonParent);
+        SetRef(shopPanel, "_effectHeader",    effectHeader);
+        SetRef(shopPanel, "_modifierHeader",  modifierHeader);
+        SetRef(shopPanel, "_boonHeader",      boonHeader);
+        SetRef(shopPanel, "_moneyText",       shopMoneyTMP);
+        SetRef(shopPanel, "_leaveButton",     shopLeaveBtn);
+
+        shopRT.gameObject.SetActive(false);
 
         // ── Fragment Upgrade Panel ────────────────────────────────────────────
-        // Built before RewardPanel so it can be referenced.
 
         var upgradePanelRT = Panel("FragmentUpgradePanel", canvas.transform,
-            new Vector2(0.1f, 0.05f), new Vector2(0.9f, 0.95f),
+            new Vector2(0.10f, 0.05f), new Vector2(0.90f, 0.95f),
             new Color(0.05f, 0.05f, 0.10f, 0.97f));
         var fragmentUpgradePanel = upgradePanelRT.gameObject.AddComponent<FragmentUpgradePanel>();
 
@@ -124,12 +343,11 @@ public static class RunSceneBuilder
             new Vector2(0.05f, 0.88f), new Vector2(0.95f, 0.97f),
             "Choose a Card to Upgrade", 20f, bold: true, color: Color.white);
 
-        var upgradeCardSlotPrefab = LoadOrBuildCardSlotPrefab();
-        var upgradeCardScrollContent = BuildScrollView(
+        var upgradeScrollContent = BuildScrollView(
             upgradeCardListRoot.GetComponent<RectTransform>(),
             new Vector2(0.02f, 0.10f), new Vector2(0.98f, 0.84f));
 
-        // Step 2: fragment detail ("blown up" card)
+        // Step 2: fragment detail
         var upgradeFragDetailRoot = CreateChild("FragmentDetailRoot", upgradePanelRT);
         Stretch(upgradeFragDetailRoot.AddComponent<RectTransform>());
 
@@ -137,31 +355,26 @@ public static class RunSceneBuilder
             new Vector2(0.05f, 0.82f), new Vector2(0.95f, 0.95f),
             "Card Name", 22f, bold: true, color: Color.white);
 
-        // Effect fragment button (left half)
         var effectBtnRT = Panel("EffectButton", upgradeFragDetailRoot.GetComponent<RectTransform>(),
             new Vector2(0.04f, 0.20f), new Vector2(0.48f, 0.78f),
             new Color(0.10f, 0.14f, 0.20f, 1f));
         var effectUpgradeBtn = effectBtnRT.gameObject.AddComponent<Button>();
+        UIText("TypeTag", effectBtnRT, new Vector2(0.05f, 0.68f), new Vector2(0.95f, 0.85f),
+            "EFFECT", 10f, bold: true, color: new Color(0.6f, 0.85f, 1f, 1f));
         var effectUpgradeLabel = UIText("Label", effectBtnRT,
             new Vector2(0.05f, 0.40f), new Vector2(0.95f, 0.65f),
             "Effect Fragment", 14f, bold: false, color: Color.white);
-        UIText("TypeTag", effectBtnRT,
-            new Vector2(0.05f, 0.68f), new Vector2(0.95f, 0.85f),
-            "EFFECT", 10f, bold: true, color: new Color(0.6f, 0.85f, 1f, 1f));
 
-        // Modifier fragment button (right half)
         var modifierBtnRT = Panel("ModifierButton", upgradeFragDetailRoot.GetComponent<RectTransform>(),
             new Vector2(0.52f, 0.20f), new Vector2(0.96f, 0.78f),
             new Color(0.14f, 0.10f, 0.20f, 1f));
         var modifierUpgradeBtn = modifierBtnRT.gameObject.AddComponent<Button>();
+        UIText("TypeTag", modifierBtnRT, new Vector2(0.05f, 0.68f), new Vector2(0.95f, 0.85f),
+            "MODIFIER", 10f, bold: true, color: new Color(1f, 0.85f, 0.6f, 1f));
         var modifierUpgradeLabel = UIText("Label", modifierBtnRT,
             new Vector2(0.05f, 0.40f), new Vector2(0.95f, 0.65f),
             "Modifier Fragment", 14f, bold: false, color: Color.white);
-        UIText("TypeTag", modifierBtnRT,
-            new Vector2(0.05f, 0.68f), new Vector2(0.95f, 0.85f),
-            "MODIFIER", 10f, bold: true, color: new Color(1f, 0.85f, 0.6f, 1f));
 
-        // Back button (returns to card list)
         var upgBackBtnRT = UI("BackButton", upgradePanelRT);
         upgBackBtnRT.anchorMin = new Vector2(0.02f, 0.01f);
         upgBackBtnRT.anchorMax = new Vector2(0.25f, 0.07f);
@@ -171,7 +384,6 @@ public static class RunSceneBuilder
         UIText("Label", upgBackBtnRT, Vector2.zero, Vector2.one,
             "Back", 13f, bold: false, color: Color.white);
 
-        // Cancel button (shared)
         var upgCancelBtnRT = UI("CancelButton", upgradePanelRT);
         upgCancelBtnRT.anchorMin = new Vector2(0.75f, 0.01f);
         upgCancelBtnRT.anchorMax = new Vector2(0.98f, 0.07f);
@@ -181,10 +393,9 @@ public static class RunSceneBuilder
         UIText("Label", upgCancelBtnRT, Vector2.zero, Vector2.one,
             "Cancel", 13f, bold: false, color: Color.white);
 
-        // Wire FragmentUpgradePanel
         SetRef(fragmentUpgradePanel, "_cardListRoot",       upgradeCardListRoot);
-        SetRef(fragmentUpgradePanel, "_cardListParent",     upgradeCardScrollContent);
-        SetRef(fragmentUpgradePanel, "_cardSlotPrefab",     upgradeCardSlotPrefab);
+        SetRef(fragmentUpgradePanel, "_cardListParent",     upgradeScrollContent);
+        SetRef(fragmentUpgradePanel, "_cardSlotPrefab",     cardSlotPrefab);
         SetRef(fragmentUpgradePanel, "_fragmentDetailRoot", upgradeFragDetailRoot);
         SetRef(fragmentUpgradePanel, "_cardNameText",       upgradeCardNameTMP);
         SetRef(fragmentUpgradePanel, "_effectButton",       effectUpgradeBtn);
@@ -196,15 +407,17 @@ public static class RunSceneBuilder
 
         upgradePanelRT.gameObject.SetActive(false);
 
+        // Wire camp → upgrade panel
+        SetRef(campPanel, "_fragmentUpgradePanel", fragmentUpgradePanel);
+
         // ── Fragment Swap Panel ───────────────────────────────────────────────
-        // Built before RewardPanel so it can be referenced.
 
         var swapPanelRT = Panel("FragmentSwapPanel", canvas.transform,
-            new Vector2(0.1f, 0.05f), new Vector2(0.9f, 0.95f),
+            new Vector2(0.10f, 0.05f), new Vector2(0.90f, 0.95f),
             new Color(0.05f, 0.05f, 0.10f, 0.97f));
         var fragmentSwapPanel = swapPanelRT.gameObject.AddComponent<FragmentSwapPanel>();
 
-        // Step 1 root: three fragment offer slots side by side
+        // Step 1: three side-by-side fragment offer slots
         var fragChoiceRoot = CreateChild("FragmentChoiceRoot", swapPanelRT);
         Stretch(fragChoiceRoot.AddComponent<RectTransform>());
 
@@ -212,8 +425,7 @@ public static class RunSceneBuilder
             new Vector2(0.05f, 0.88f), new Vector2(0.95f, 0.97f),
             "Choose a Fragment", 20f, bold: true, color: Color.white);
 
-        // Three side-by-side fragment offer views
-        var offerSlotPositions = new[]
+        var offerPositions = new[]
         {
             (new Vector2(0.04f, 0.20f), new Vector2(0.33f, 0.85f)),
             (new Vector2(0.36f, 0.20f), new Vector2(0.65f, 0.85f)),
@@ -223,7 +435,7 @@ public static class RunSceneBuilder
         var fragViews = new FragmentOfferView[3];
         for (int i = 0; i < 3; i++)
         {
-            var (min, max) = offerSlotPositions[i];
+            var (min, max) = offerPositions[i];
             var slotRT = Panel($"FragmentOffer{i + 1}", fragChoiceRoot.GetComponent<RectTransform>(),
                 min, max, new Color(0.10f, 0.09f, 0.14f, 1f));
             var fov = slotRT.gameObject.AddComponent<FragmentOfferView>();
@@ -242,21 +454,21 @@ public static class RunSceneBuilder
                 ftmp.textWrappingMode = TextWrappingModes.Normal;
 
             var selBtnRT = UI("SelectButton", slotRT);
-            selBtnRT.anchorMin        = new Vector2(0.1f, 0.03f);
-            selBtnRT.anchorMax        = new Vector2(0.9f, 0.17f);
-            selBtnRT.offsetMin        = selBtnRT.offsetMax = Vector2.zero;
+            selBtnRT.anchorMin = new Vector2(0.1f, 0.03f);
+            selBtnRT.anchorMax = new Vector2(0.9f, 0.17f);
+            selBtnRT.offsetMin = selBtnRT.offsetMax = Vector2.zero;
             selBtnRT.gameObject.AddComponent<Image>().color = new Color(0.20f, 0.40f, 0.20f, 1f);
             var selBtn = selBtnRT.gameObject.AddComponent<Button>();
             UIText("Label", selBtnRT, Vector2.zero, Vector2.one,
                 "Choose", 12f, bold: true, color: Color.white);
 
-            SetRef(fov, "_nameText",    nameTMP);
-            SetRef(fov, "_typeText",    typeTMP);
-            SetRef(fov, "_flavorText",  flavorTMP);
+            SetRef(fov, "_nameText",     nameTMP);
+            SetRef(fov, "_typeText",     typeTMP);
+            SetRef(fov, "_flavorText",   flavorTMP);
             SetRef(fov, "_selectButton", selBtn);
         }
 
-        // Step 2 root: card list scroll view
+        // Step 2: card list
         var cardChoiceRoot = CreateChild("CardChoiceRoot", swapPanelRT);
         Stretch(cardChoiceRoot.AddComponent<RectTransform>());
 
@@ -264,25 +476,83 @@ public static class RunSceneBuilder
             new Vector2(0.05f, 0.86f), new Vector2(0.95f, 0.97f),
             "Pick a card to replace its fragment.", 16f, bold: false, color: Color.white);
 
-        // Reuse the card slot prefab (already built for the upgrade panel)
-        var cardSlotPrefab = upgradeCardSlotPrefab;
-
-        // Scroll view for card list
         var cardScrollContent = BuildScrollView(
             cardChoiceRoot.GetComponent<RectTransform>(),
             new Vector2(0.02f, 0.06f), new Vector2(0.98f, 0.84f));
 
-        // Cancel button (shared between both steps)
-        var cancelBtnRT = UI("CancelButton", swapPanelRT);
-        cancelBtnRT.anchorMin        = new Vector2(0.38f, 0.01f);
-        cancelBtnRT.anchorMax        = new Vector2(0.62f, 0.07f);
-        cancelBtnRT.offsetMin        = cancelBtnRT.offsetMax = Vector2.zero;
-        cancelBtnRT.gameObject.AddComponent<Image>().color = new Color(0.35f, 0.10f, 0.10f, 1f);
-        var cancelBtn = cancelBtnRT.gameObject.AddComponent<Button>();
-        UIText("Label", cancelBtnRT, Vector2.zero, Vector2.one,
+        // Step 3: preview (before / after)
+        var previewRoot = CreateChild("PreviewRoot", swapPanelRT);
+        Stretch(previewRoot.AddComponent<RectTransform>());
+
+        UIText("Header", previewRoot.GetComponent<RectTransform>(),
+            new Vector2(0.05f, 0.88f), new Vector2(0.95f, 0.97f),
+            "Preview Change", 20f, bold: true, color: Color.white);
+
+        // Before column (left half)
+        var beforeRT = Panel("Before", previewRoot.GetComponent<RectTransform>(),
+            new Vector2(0.03f, 0.22f), new Vector2(0.48f, 0.87f),
+            new Color(0.10f, 0.09f, 0.14f, 1f));
+
+        UIText("Tag", beforeRT, new Vector2(0.05f, 0.86f), new Vector2(0.95f, 0.97f),
+            "BEFORE", 10f, bold: true, color: new Color(0.6f, 0.6f, 0.6f, 1f));
+
+        var beforeNameTMP = UIText("Name", beforeRT,
+            new Vector2(0.05f, 0.72f), new Vector2(0.95f, 0.87f),
+            "Card Name", 14f, bold: true, color: Color.white);
+
+        var beforeDescTMP = UIText("Desc", beforeRT,
+            new Vector2(0.05f, 0.10f), new Vector2(0.95f, 0.72f),
+            "Card description.", 10f, bold: false, color: new Color(0.80f, 0.80f, 0.80f, 1f));
+        if (beforeDescTMP is TextMeshProUGUI bdTmp)
+            bdTmp.textWrappingMode = TextWrappingModes.Normal;
+
+        // After column (right half)
+        var afterRT = Panel("After", previewRoot.GetComponent<RectTransform>(),
+            new Vector2(0.52f, 0.22f), new Vector2(0.97f, 0.87f),
+            new Color(0.08f, 0.14f, 0.10f, 1f));
+
+        UIText("Tag", afterRT, new Vector2(0.05f, 0.86f), new Vector2(0.95f, 0.97f),
+            "AFTER", 10f, bold: true, color: new Color(0.5f, 0.9f, 0.5f, 1f));
+
+        var afterNameTMP = UIText("Name", afterRT,
+            new Vector2(0.05f, 0.72f), new Vector2(0.95f, 0.87f),
+            "Card Name", 14f, bold: true, color: Color.white);
+
+        var afterDescTMP = UIText("Desc", afterRT,
+            new Vector2(0.05f, 0.10f), new Vector2(0.95f, 0.72f),
+            "Card description.", 10f, bold: false, color: new Color(0.80f, 0.80f, 0.80f, 1f));
+        if (afterDescTMP is TextMeshProUGUI adTmp)
+            adTmp.textWrappingMode = TextWrappingModes.Normal;
+
+        // Confirm and back buttons
+        var previewConfirmRT = UI("ConfirmButton", previewRoot.GetComponent<RectTransform>());
+        previewConfirmRT.anchorMin = new Vector2(0.55f, 0.02f);
+        previewConfirmRT.anchorMax = new Vector2(0.97f, 0.12f);
+        previewConfirmRT.offsetMin = previewConfirmRT.offsetMax = Vector2.zero;
+        previewConfirmRT.gameObject.AddComponent<Image>().color = new Color(0.15f, 0.45f, 0.15f, 1f);
+        var confirmBtn = previewConfirmRT.gameObject.AddComponent<Button>();
+        UIText("Label", previewConfirmRT, Vector2.zero, Vector2.one,
+            "Confirm Swap", 14f, bold: true, color: Color.white);
+
+        var previewBackRT = UI("PreviewBackButton", previewRoot.GetComponent<RectTransform>());
+        previewBackRT.anchorMin = new Vector2(0.03f, 0.02f);
+        previewBackRT.anchorMax = new Vector2(0.45f, 0.12f);
+        previewBackRT.offsetMin = previewBackRT.offsetMax = Vector2.zero;
+        previewBackRT.gameObject.AddComponent<Image>().color = new Color(0.20f, 0.20f, 0.25f, 1f);
+        var previewBackBtn = previewBackRT.gameObject.AddComponent<Button>();
+        UIText("Label", previewBackRT, Vector2.zero, Vector2.one,
+            "Back", 13f, bold: false, color: Color.white);
+
+        // Shared cancel button
+        var swapCancelRT = UI("CancelButton", swapPanelRT);
+        swapCancelRT.anchorMin = new Vector2(0.38f, 0.01f);
+        swapCancelRT.anchorMax = new Vector2(0.62f, 0.07f);
+        swapCancelRT.offsetMin = swapCancelRT.offsetMax = Vector2.zero;
+        swapCancelRT.gameObject.AddComponent<Image>().color = new Color(0.35f, 0.10f, 0.10f, 1f);
+        var swapCancelBtn = swapCancelRT.gameObject.AddComponent<Button>();
+        UIText("Label", swapCancelRT, Vector2.zero, Vector2.one,
             "Cancel", 13f, bold: false, color: Color.white);
 
-        // Wire FragmentSwapPanel
         SetRef(fragmentSwapPanel, "_fragmentChoiceRoot", fragChoiceRoot);
         SetRef(fragmentSwapPanel, "_offerView1",         fragViews[0]);
         SetRef(fragmentSwapPanel, "_offerView2",         fragViews[1]);
@@ -291,158 +561,23 @@ public static class RunSceneBuilder
         SetRef(fragmentSwapPanel, "_instructionText",    instructionTMP);
         SetRef(fragmentSwapPanel, "_cardListParent",     cardScrollContent);
         SetRef(fragmentSwapPanel, "_cardSlotPrefab",     cardSlotPrefab);
-        SetRef(fragmentSwapPanel, "_cancelButton",       cancelBtn);
+        SetRef(fragmentSwapPanel, "_previewRoot",        previewRoot);
+        SetRef(fragmentSwapPanel, "_beforeNameText",     beforeNameTMP);
+        SetRef(fragmentSwapPanel, "_beforeDescText",     beforeDescTMP);
+        SetRef(fragmentSwapPanel, "_afterNameText",      afterNameTMP);
+        SetRef(fragmentSwapPanel, "_afterDescText",      afterDescTMP);
+        SetRef(fragmentSwapPanel, "_confirmButton",      confirmBtn);
+        SetRef(fragmentSwapPanel, "_previewBackButton",  previewBackBtn);
+        SetRef(fragmentSwapPanel, "_cancelButton",       swapCancelBtn);
 
         swapPanelRT.gameObject.SetActive(false);
 
-        // ── Reward Panel ──────────────────────────────────────────────────────
+        // Wire shop → swap panel (for fragment purchases)
+        SetRef(shopPanel, "_fragmentSwapPanel", fragmentSwapPanel);
 
-        var rewardPanelRT = Panel("RewardPanel", canvas.transform,
-            new Vector2(0.15f, 0.10f), new Vector2(0.85f, 0.92f),
-            new Color(0.06f, 0.05f, 0.10f, 0.95f));
-        var rewardPanel = rewardPanelRT.gameObject.AddComponent<RewardPanel>();
-
-        var rewardHeaderTMP = UIText("Header", rewardPanelRT,
-            new Vector2(0.05f, 0.88f), new Vector2(0.95f, 0.97f),
-            "Encounter Complete", 22f, bold: true, color: Color.white);
-
-        // Two boon offer slots (matches regularOfferCount = 2 default)
-        var boonSlotPositions = new[]
-        {
-            (new Vector2(0.04f, 0.10f), new Vector2(0.48f, 0.85f)),
-            (new Vector2(0.52f, 0.10f), new Vector2(0.96f, 0.85f)),
-        };
-
-        var boonSlots = new BoonOfferView[2];
-        for (int i = 0; i < 2; i++)
-        {
-            var (min, max) = boonSlotPositions[i];
-            var slotRT = Panel($"BoonOffer{i + 1}", rewardPanelRT,
-                min, max, new Color(0.10f, 0.09f, 0.14f, 1f));
-            var bov = slotRT.gameObject.AddComponent<BoonOfferView>();
-            boonSlots[i] = bov;
-
-            var iconRT = UI("Icon", slotRT);
-            iconRT.anchorMin = new Vector2(0.35f, 0.73f);
-            iconRT.anchorMax = new Vector2(0.65f, 0.95f);
-            iconRT.offsetMin = iconRT.offsetMax = Vector2.zero;
-            var iconImg = iconRT.gameObject.AddComponent<Image>();
-            iconImg.color = new Color(0.5f, 0.5f, 0.5f, 0.5f);
-
-            var bNameTMP = UIText("Name", slotRT,
-                new Vector2(0.05f, 0.62f), new Vector2(0.95f, 0.75f),
-                "Boon Name", 14f, bold: true, color: Color.white);
-            var bDescTMP = UIText("Description", slotRT,
-                new Vector2(0.05f, 0.18f), new Vector2(0.95f, 0.62f),
-                "Boon description.", 10f, bold: false,
-                color: new Color(0.80f, 0.80f, 0.80f, 1f));
-            if (bDescTMP is TextMeshProUGUI bdtmp)
-                bdtmp.textWrappingMode = TextWrappingModes.Normal;
-
-            var bSelRT = UI("SelectButton", slotRT);
-            bSelRT.anchorMin = new Vector2(0.1f, 0.02f);
-            bSelRT.anchorMax = new Vector2(0.9f, 0.15f);
-            bSelRT.offsetMin = bSelRT.offsetMax = Vector2.zero;
-            bSelRT.gameObject.AddComponent<Image>().color = new Color(0.20f, 0.35f, 0.55f, 1f);
-            var bSelBtn = bSelRT.gameObject.AddComponent<Button>();
-            UIText("Label", bSelRT, Vector2.zero, Vector2.one,
-                "Choose", 12f, bold: true, color: Color.white);
-
-            SetRef(bov, "_nameText",        bNameTMP);
-            SetRef(bov, "_descriptionText", bDescTMP);
-            SetRef(bov, "_icon",            iconImg);
-            SetRef(bov, "_selectButton",    bSelBtn);
-        }
-
-        // Fragment swap button (left half of bottom strip)
-        var swapBtnRT = UI("FragmentSwapButton", rewardPanelRT);
-        swapBtnRT.anchorMin        = new Vector2(0.03f, 0.01f);
-        swapBtnRT.anchorMax        = new Vector2(0.48f, 0.09f);
-        swapBtnRT.offsetMin        = swapBtnRT.offsetMax = Vector2.zero;
-        swapBtnRT.gameObject.AddComponent<Image>().color = new Color(0.35f, 0.20f, 0.55f, 1f);
-        var swapBtn = swapBtnRT.gameObject.AddComponent<Button>();
-        var swapBtnLabel = UIText("Label", swapBtnRT, Vector2.zero, Vector2.one,
-            "Swap a Fragment", 13f, bold: false, color: Color.white);
-
-        // Fragment upgrade button (right half of bottom strip)
-        var upgradeBtnRT = UI("FragmentUpgradeButton", rewardPanelRT);
-        upgradeBtnRT.anchorMin        = new Vector2(0.52f, 0.01f);
-        upgradeBtnRT.anchorMax        = new Vector2(0.97f, 0.09f);
-        upgradeBtnRT.offsetMin        = upgradeBtnRT.offsetMax = Vector2.zero;
-        upgradeBtnRT.gameObject.AddComponent<Image>().color = new Color(0.20f, 0.40f, 0.30f, 1f);
-        var upgradeBtn = upgradeBtnRT.gameObject.AddComponent<Button>();
-        var upgradeBtnLabel = UIText("Label", upgradeBtnRT, Vector2.zero, Vector2.one,
-            "Upgrade a Fragment", 13f, bold: false, color: Color.white);
-
-        // Wire RewardPanel
-        SetRef(rewardPanel, "_headerText",           rewardHeaderTMP);
-        SetRef(rewardPanel, "_fragmentSwapPanel",    fragmentSwapPanel);
-        SetRef(rewardPanel, "_fragmentUpgradePanel", fragmentUpgradePanel);
-
-        // Boon slots list
-        var rpSO = new SerializedObject(rewardPanel);
-        var boonSlotsProp = rpSO.FindProperty("_boonSlots");
-        boonSlotsProp.arraySize = 2;
-        boonSlotsProp.GetArrayElementAtIndex(0).objectReferenceValue = boonSlots[0];
-        boonSlotsProp.GetArrayElementAtIndex(1).objectReferenceValue = boonSlots[1];
-
-        var swapSlotsProp = rpSO.FindProperty("_fragmentSwapSlots");
-        swapSlotsProp.arraySize = 1;
-        swapSlotsProp.GetArrayElementAtIndex(0).objectReferenceValue = swapBtn;
-
-        var swapLabelsProp = rpSO.FindProperty("_swapSlotLabels");
-        swapLabelsProp.arraySize = 1;
-        swapLabelsProp.GetArrayElementAtIndex(0).objectReferenceValue = swapBtnLabel;
-
-        var upgradeSlotsProp = rpSO.FindProperty("_fragmentUpgradeSlots");
-        upgradeSlotsProp.arraySize = 1;
-        upgradeSlotsProp.GetArrayElementAtIndex(0).objectReferenceValue = upgradeBtn;
-
-        var upgradeLabelsProp = rpSO.FindProperty("_upgradeSlotLabels");
-        upgradeLabelsProp.arraySize = 1;
-        upgradeLabelsProp.GetArrayElementAtIndex(0).objectReferenceValue = upgradeBtnLabel;
-
-        rpSO.ApplyModifiedPropertiesWithoutUndo();
-
-        rewardPanelRT.gameObject.SetActive(false);
-
-        // ── Save Prompt Panel ─────────────────────────────────────────────────
-
-        var savePanelRT = Panel("SavePromptPanel", canvas.transform,
-            new Vector2(0.25f, 0.25f), new Vector2(0.75f, 0.80f),
-            new Color(0.06f, 0.05f, 0.08f, 0.97f));
-        var savePromptPanel = savePanelRT.gameObject.AddComponent<SavePromptPanel>();
-
-        var saveBodyTMP = UIText("Body", savePanelRT,
-            new Vector2(0.06f, 0.35f), new Vector2(0.94f, 0.94f),
-            "(save prompt body)", 11f, bold: false,
-            color: new Color(0.85f, 0.85f, 0.85f, 1f));
-        if (saveBodyTMP is TextMeshProUGUI sbtmp)
-            sbtmp.textWrappingMode = TextWrappingModes.Normal;
-
-        var saveBtnRT = UI("SaveButton", savePanelRT);
-        saveBtnRT.anchorMin = new Vector2(0.05f, 0.04f);
-        saveBtnRT.anchorMax = new Vector2(0.46f, 0.18f);
-        saveBtnRT.offsetMin = saveBtnRT.offsetMax = Vector2.zero;
-        saveBtnRT.gameObject.AddComponent<Image>().color = new Color(0.55f, 0.22f, 0.10f, 1f);
-        var saveBtn = saveBtnRT.gameObject.AddComponent<Button>();
-        UIText("Label", saveBtnRT, Vector2.zero, Vector2.one,
-            "Save", 15f, bold: true, color: Color.white);
-
-        var contBtnRT = UI("ContinueButton", savePanelRT);
-        contBtnRT.anchorMin = new Vector2(0.54f, 0.04f);
-        contBtnRT.anchorMax = new Vector2(0.95f, 0.18f);
-        contBtnRT.offsetMin = contBtnRT.offsetMax = Vector2.zero;
-        contBtnRT.gameObject.AddComponent<Image>().color = new Color(0.12f, 0.35f, 0.12f, 1f);
-        var contBtn = contBtnRT.gameObject.AddComponent<Button>();
-        UIText("Label", contBtnRT, Vector2.zero, Vector2.one,
-            "Continue", 15f, bold: true, color: Color.white);
-
-        SetRef(savePromptPanel, "_bodyText",       saveBodyTMP);
-        SetRef(savePromptPanel, "_saveButton",     saveBtn);
-        SetRef(savePromptPanel, "_continueButton", contBtn);
-
-        savePanelRT.gameObject.SetActive(false);
+        // Wire nodeRewardPanel → sub-panels
+        SetRef(nodeRewardPanel, "_fragmentSwapPanel", fragmentSwapPanel);
+        SetRef(nodeRewardPanel, "_boonRewardPanel",   boonRewardPanel);
 
         // ── Run Over Panel ────────────────────────────────────────────────────
 
@@ -456,8 +591,7 @@ public static class RunSceneBuilder
             "Defeated", 26f, bold: true, color: Color.white);
         var runOverSummaryTMP = UIText("Summary", runOverRT,
             new Vector2(0.05f, 0.35f), new Vector2(0.95f, 0.72f),
-            "Summary text.", 13f, bold: false,
-            color: new Color(0.80f, 0.80f, 0.80f, 1f));
+            "Summary text.", 13f, bold: false, color: new Color(0.80f, 0.80f, 0.80f, 1f));
 
         var returnBtnRT = UI("ReturnButton", runOverRT);
         returnBtnRT.anchorMin = new Vector2(0.2f, 0.06f);
@@ -474,31 +608,44 @@ public static class RunSceneBuilder
 
         runOverRT.gameObject.SetActive(false);
 
+        // ── HUD strip (always on top — added last to render above panels) ─────
+
+        var hudRT = UI("HUD", canvas.transform);
+        hudRT.anchorMin = new Vector2(0f, 0.92f);
+        hudRT.anchorMax = Vector2.one;
+        hudRT.offsetMin = hudRT.offsetMax = Vector2.zero;
+        hudRT.gameObject.AddComponent<Image>().color = new Color(0.04f, 0.03f, 0.06f, 0.90f);
+
+        var moneyTMP = UIText("MoneyText", hudRT,
+            new Vector2(0.02f, 0.1f), new Vector2(0.30f, 0.9f),
+            "Gold: 100", 16f, bold: false, color: new Color(1f, 0.85f, 0.3f, 1f));
+
         // ── Wire RunSceneController ───────────────────────────────────────────
 
-        SetRef(controller, "_rewardPanel",        rewardPanel);
-        SetRef(controller, "_savePromptPanel",     savePromptPanel);
-        SetRef(controller, "_runOverPanel",        runOverPanel);
-        SetRef(controller, "_encounterNameText",   encounterNameTMP);
-        SetRef(controller, "_enemyCountText",      enemyCountTMP);
-        SetRef(controller, "_beginEncounterButton", beginBtn);
+        SetRef(controller, "_mapView",           mapView);
+        SetRef(controller, "_nodeRewardPanel",   nodeRewardPanel);
+        SetRef(controller, "_boonRewardPanel",   boonRewardPanel);
+        SetRef(controller, "_fragmentSwapPanel", fragmentSwapPanel);
+        SetRef(controller, "_campPanel",         campPanel);
+        SetRef(controller, "_shopPanel",         shopPanel);
+        SetRef(controller, "_runOverPanel",      runOverPanel);
+        SetRef(controller, "_moneyText",         moneyTMP);
 
-        // ── Render order: sub-panels always on top ────────────────────────────
+        // ── Render order: modal panels always above map ───────────────────────
         upgradePanelRT.SetAsLastSibling();
         swapPanelRT.SetAsLastSibling();
+        boonRewardRT.SetAsLastSibling();
+        nodeRewardRT.SetAsLastSibling();
+        runOverRT.SetAsLastSibling();
+        hudRT.SetAsLastSibling();
 
         EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());
         Selection.activeGameObject = root;
-        Debug.Log("[DeckSaver] Run scene built. Open the Run scene and run this from the DeckSaver menu.");
+        Debug.Log("[DeckSaver] Run scene built successfully.");
     }
 
-    // ── Wire Hub scene for run ────────────────────────────────────────────────
+    // ── Configure Hub ─────────────────────────────────────────────────────────
 
-    /// <summary>
-    /// Open the Hub scene, then run this.
-    /// Creates a starter RunConfig asset (if one doesn't exist) and wires it
-    /// into HubUI along with the Run scene name.
-    /// </summary>
     [MenuItem("DeckSaver/Configure Hub for Run Scene")]
     public static void ConfigureHub()
     {
@@ -506,11 +653,10 @@ public static class RunSceneBuilder
         if (hubUI == null)
         {
             EditorUtility.DisplayDialog("Configure Hub",
-                "No HubUI found in the active scene. Open the Hub scene first.", "OK");
+                "No HubUI found. Open the Hub scene first.", "OK");
             return;
         }
 
-        // Create a starter RunConfig asset if none exists
         const string configPath = "Assets/Data/DefaultRunConfig.asset";
         if (!AssetDatabase.IsValidFolder("Assets/Data"))
             AssetDatabase.CreateFolder("Assets", "Data");
@@ -521,19 +667,17 @@ public static class RunSceneBuilder
             config = ScriptableObject.CreateInstance<RunConfig>();
             AssetDatabase.CreateAsset(config, configPath);
             AssetDatabase.SaveAssets();
-            Debug.Log($"[DeckSaver] Created starter RunConfig at {configPath}. " +
-                      "Open it to assign encounter pools and reward pools.");
+            Debug.Log($"[DeckSaver] Created starter RunConfig at {configPath}.");
         }
 
-        // Wire HubUI
         var so = new SerializedObject(hubUI);
-        so.FindProperty("_runConfig").objectReferenceValue   = config;
-        so.FindProperty("_runSceneName").stringValue         = "Run";
+        so.FindProperty("_runConfig").objectReferenceValue = config;
+        so.FindProperty("_runSceneName").stringValue       = "Run";
         so.ApplyModifiedProperties();
 
         EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());
         Selection.activeObject = config;
-        Debug.Log("[DeckSaver] Hub configured. RunConfig selected in Project window — assign your encounter and reward pools.");
+        Debug.Log("[DeckSaver] Hub configured. Assign encounter and reward pools in the RunConfig.");
     }
 
     // ── Add BoonManager to Battle scene ──────────────────────────────────────
@@ -548,7 +692,6 @@ public static class RunSceneBuilder
             return;
         }
 
-        // Try to parent under an existing manager object for tidiness
         var battleUI = Object.FindFirstObjectByType<BattleUI>();
         var parent   = battleUI != null ? battleUI.transform : null;
 
@@ -559,33 +702,82 @@ public static class RunSceneBuilder
 
         EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());
         Selection.activeGameObject = go;
-        Debug.Log("[DeckSaver] BoonManager added. Make sure to save the Battle scene.");
+        Debug.Log("[DeckSaver] BoonManager added.");
     }
 
-    // ── Card slot prefab ──────────────────────────────────────────────────────
+    // ── Layout helpers ────────────────────────────────────────────────────────
+
+    /// <summary>Builds one camp option row: label on the left, button on the right.</summary>
+    private static (Button btn, TMP_Text label) BuildCampOptionRow(
+        string name, RectTransform parent, Vector2 anchorMin, Vector2 anchorMax)
+    {
+        var rowRT = Panel(name, parent, anchorMin, anchorMax,
+            new Color(0.10f, 0.12f, 0.10f, 1f));
+
+        var label = UIText("Label", rowRT,
+            new Vector2(0.03f, 0.15f), new Vector2(0.68f, 0.85f),
+            "Option", 13f, bold: false, color: Color.white);
+        if (label is TextMeshProUGUI ltmp)
+            ltmp.textWrappingMode = TextWrappingModes.Normal;
+
+        var btnRT = UI("Button", rowRT);
+        btnRT.anchorMin = new Vector2(0.70f, 0.15f);
+        btnRT.anchorMax = new Vector2(0.97f, 0.85f);
+        btnRT.offsetMin = btnRT.offsetMax = Vector2.zero;
+        btnRT.gameObject.AddComponent<Image>().color = new Color(0.18f, 0.38f, 0.18f, 1f);
+        var btn = btnRT.gameObject.AddComponent<Button>();
+        UIText("Label", btnRT, Vector2.zero, Vector2.one,
+            "Use", 13f, bold: true, color: Color.white);
+
+        return (btn, label);
+    }
+
+    /// <summary>Builds one shop column: header TMP + content parent (VerticalLayoutGroup).</summary>
+    private static (TMP_Text header, RectTransform content) BuildShopColumn(
+        string name, RectTransform parent, float xMin, float xMax)
+    {
+        var colRT = UI(name, parent);
+        colRT.anchorMin = new Vector2(xMin, 0.08f);
+        colRT.anchorMax = new Vector2(xMax, 0.83f);
+        colRT.offsetMin = colRT.offsetMax = Vector2.zero;
+
+        var header = UIText("Header", colRT,
+            new Vector2(0f, 0.88f), new Vector2(1f, 1.0f),
+            "Category", 14f, bold: true, color: new Color(0.85f, 0.85f, 1f, 1f));
+
+        var contentRT = UI("Content", colRT);
+        contentRT.anchorMin = new Vector2(0f, 0f);
+        contentRT.anchorMax = new Vector2(1f, 0.86f);
+        contentRT.offsetMin = contentRT.offsetMax = Vector2.zero;
+        var vGroup = contentRT.gameObject.AddComponent<VerticalLayoutGroup>();
+        vGroup.spacing                = 8f;
+        vGroup.childForceExpandWidth  = true;
+        vGroup.childForceExpandHeight = false;
+        vGroup.childAlignment         = TextAnchor.UpperCenter;
+        vGroup.padding                = new RectOffset(4, 4, 4, 4);
+        contentRT.gameObject.AddComponent<ContentSizeFitter>().verticalFit =
+            ContentSizeFitter.FitMode.PreferredSize;
+
+        return (header, contentRT);
+    }
+
+    // ── Prefab builders ───────────────────────────────────────────────────────
 
     private static GameObject LoadOrBuildCardSlotPrefab()
     {
         const string path = "Assets/Prefabs/FragmentSwapCardSlot.prefab";
-
         var existing = AssetDatabase.LoadAssetAtPath<GameObject>(path);
         if (existing != null) return existing;
 
-        if (!AssetDatabase.IsValidFolder("Assets/Prefabs"))
-            AssetDatabase.CreateFolder("Assets", "Prefabs");
+        EnsurePrefabFolder();
 
         var go = new GameObject("FragmentSwapCardSlot", typeof(RectTransform));
-        var rt = go.GetComponent<RectTransform>();
-        rt.sizeDelta = new Vector2(140f, 200f);
-
         go.AddComponent<Image>().color = new Color(0.12f, 0.10f, 0.16f, 1f);
-        var btn = go.AddComponent<Button>();
+        go.AddComponent<Button>();
 
         var nameRT = new GameObject("Name", typeof(RectTransform)).GetComponent<RectTransform>();
         nameRT.SetParent(go.transform, false);
-        nameRT.anchorMin = new Vector2(0f, 0.15f);
-        nameRT.anchorMax = Vector2.one;
-        nameRT.offsetMin = nameRT.offsetMax = Vector2.zero;
+        SetAnchors(nameRT, new Vector2(0f, 0.15f), Vector2.one);
         var nameTMP = nameRT.gameObject.AddComponent<TextMeshProUGUI>();
         nameTMP.text             = "Card Name";
         nameTMP.fontSize         = 10f;
@@ -593,14 +785,217 @@ public static class RunSceneBuilder
         nameTMP.textWrappingMode = TextWrappingModes.Normal;
         nameTMP.color            = Color.white;
 
+        go.GetComponent<RectTransform>().sizeDelta = new Vector2(140f, 200f);
+
+        return SavePrefab(go, path);
+    }
+
+    private static GameObject LoadOrBuildBoonOfferPrefab()
+    {
+        const string path = "Assets/Prefabs/BoonOfferView.prefab";
+        var existing = AssetDatabase.LoadAssetAtPath<GameObject>(path);
+        if (existing != null) return existing;
+
+        EnsurePrefabFolder();
+
+        var go = new GameObject("BoonOfferView", typeof(RectTransform));
+        go.GetComponent<RectTransform>().sizeDelta = new Vector2(400f, 120f);
+        go.AddComponent<Image>().color = new Color(0.10f, 0.09f, 0.14f, 1f);
+
+        var bov = go.AddComponent<BoonOfferView>();
+
+        // Icon (small, left side)
+        var iconRT = new GameObject("Icon", typeof(RectTransform)).GetComponent<RectTransform>();
+        iconRT.SetParent(go.transform, false);
+        SetAnchors(iconRT, new Vector2(0.02f, 0.15f), new Vector2(0.18f, 0.85f));
+        var iconImg = iconRT.gameObject.AddComponent<Image>();
+        iconImg.color = new Color(0.5f, 0.5f, 0.5f, 0.5f);
+
+        // Name TMP
+        var nameRT = new GameObject("Name", typeof(RectTransform)).GetComponent<RectTransform>();
+        nameRT.SetParent(go.transform, false);
+        SetAnchors(nameRT, new Vector2(0.20f, 0.55f), new Vector2(0.78f, 0.90f));
+        var nameTMP = nameRT.gameObject.AddComponent<TextMeshProUGUI>();
+        nameTMP.text      = "Boon Name";
+        nameTMP.fontSize  = 13f;
+        nameTMP.fontStyle = FontStyles.Bold;
+        nameTMP.color     = Color.white;
+
+        // Description TMP
+        var descRT = new GameObject("Description", typeof(RectTransform)).GetComponent<RectTransform>();
+        descRT.SetParent(go.transform, false);
+        SetAnchors(descRT, new Vector2(0.20f, 0.15f), new Vector2(0.78f, 0.55f));
+        var descTMP = descRT.gameObject.AddComponent<TextMeshProUGUI>();
+        descTMP.text             = "Boon description.";
+        descTMP.fontSize         = 9f;
+        descTMP.color            = new Color(0.80f, 0.80f, 0.80f, 1f);
+        descTMP.textWrappingMode = TextWrappingModes.Normal;
+
+        // Select button
+        var btnRT = new GameObject("SelectButton", typeof(RectTransform)).GetComponent<RectTransform>();
+        btnRT.SetParent(go.transform, false);
+        SetAnchors(btnRT, new Vector2(0.80f, 0.15f), new Vector2(0.97f, 0.85f));
+        btnRT.gameObject.AddComponent<Image>().color = new Color(0.20f, 0.35f, 0.55f, 1f);
+        var selBtn = btnRT.gameObject.AddComponent<Button>();
+
+        var selLabelRT = new GameObject("Label", typeof(RectTransform)).GetComponent<RectTransform>();
+        selLabelRT.SetParent(btnRT, false);
+        SetAnchors(selLabelRT, Vector2.zero, Vector2.one);
+        var selTMP = selLabelRT.gameObject.AddComponent<TextMeshProUGUI>();
+        selTMP.text      = "Choose";
+        selTMP.fontSize  = 10f;
+        selTMP.fontStyle = FontStyles.Bold;
+        selTMP.alignment = TextAlignmentOptions.Center;
+        selTMP.color     = Color.white;
+
+        // Wire BoonOfferView
+        var so = new SerializedObject(bov);
+        so.FindProperty("_nameText").objectReferenceValue        = nameTMP;
+        so.FindProperty("_descriptionText").objectReferenceValue = descTMP;
+        so.FindProperty("_icon").objectReferenceValue            = iconImg;
+        so.FindProperty("_selectButton").objectReferenceValue    = selBtn;
+        so.ApplyModifiedPropertiesWithoutUndo();
+
+        return SavePrefab(go, path);
+    }
+
+    private static GameObject LoadOrBuildShopSlotPrefab()
+    {
+        const string path = "Assets/Prefabs/ShopSlot.prefab";
+        var existing = AssetDatabase.LoadAssetAtPath<GameObject>(path);
+        if (existing != null) return existing;
+
+        EnsurePrefabFolder();
+
+        var go = new GameObject("ShopSlot", typeof(RectTransform));
+        go.GetComponent<RectTransform>().sizeDelta = new Vector2(200f, 80f);
+        go.AddComponent<Image>().color = new Color(0.10f, 0.09f, 0.14f, 1f);
+
+        // Name TMP (child 0 — ShopPanel.CreateSlot reads tmps[0])
+        var nameRT = new GameObject("Name", typeof(RectTransform)).GetComponent<RectTransform>();
+        nameRT.SetParent(go.transform, false);
+        SetAnchors(nameRT, new Vector2(0.04f, 0.52f), new Vector2(0.96f, 0.95f));
+        var nameTMP = nameRT.gameObject.AddComponent<TextMeshProUGUI>();
+        nameTMP.text             = "Item Name";
+        nameTMP.fontSize         = 11f;
+        nameTMP.fontStyle        = FontStyles.Bold;
+        nameTMP.color            = Color.white;
+        nameTMP.textWrappingMode = TextWrappingModes.Normal;
+
+        // Price TMP (child 1 — ShopPanel.CreateSlot reads tmps[1])
+        var priceRT = new GameObject("Price", typeof(RectTransform)).GetComponent<RectTransform>();
+        priceRT.SetParent(go.transform, false);
+        SetAnchors(priceRT, new Vector2(0.04f, 0.28f), new Vector2(0.60f, 0.52f));
+        var priceTMP = priceRT.gameObject.AddComponent<TextMeshProUGUI>();
+        priceTMP.text     = "50g";
+        priceTMP.fontSize = 10f;
+        priceTMP.color    = new Color(1f, 0.85f, 0.3f, 1f);
+
+        // Buy Button (child 2)
+        var btnRT = new GameObject("BuyButton", typeof(RectTransform)).GetComponent<RectTransform>();
+        btnRT.SetParent(go.transform, false);
+        SetAnchors(btnRT, new Vector2(0.62f, 0.10f), new Vector2(0.97f, 0.90f));
+        btnRT.gameObject.AddComponent<Image>().color = new Color(0.18f, 0.38f, 0.18f, 1f);
+        btnRT.gameObject.AddComponent<Button>();
+
+        var buyLabelRT = new GameObject("Label", typeof(RectTransform)).GetComponent<RectTransform>();
+        buyLabelRT.SetParent(btnRT, false);
+        SetAnchors(buyLabelRT, Vector2.zero, Vector2.one);
+        var buyTMP = buyLabelRT.gameObject.AddComponent<TextMeshProUGUI>();
+        buyTMP.text      = "Buy";
+        buyTMP.fontSize  = 10f;
+        buyTMP.fontStyle = FontStyles.Bold;
+        buyTMP.alignment = TextAlignmentOptions.Center;
+        buyTMP.color     = Color.white;
+
+        return SavePrefab(go, path);
+    }
+
+    private static GameObject LoadOrBuildMapNodePrefab()
+    {
+        const string path = "Assets/Prefabs/MapNode.prefab";
+        var existing = AssetDatabase.LoadAssetAtPath<GameObject>(path);
+        if (existing != null) return existing;
+
+        EnsurePrefabFolder();
+
+        var go = new GameObject("MapNode", typeof(RectTransform));
+        go.GetComponent<RectTransform>().sizeDelta = new Vector2(72f, 72f);
+
+        var bg = go.AddComponent<Image>();
+        bg.color = Color.white;
+
+        var btn = go.AddComponent<Button>();
+        var nav = btn.navigation;
+        nav.mode         = Navigation.Mode.None;
+        btn.navigation   = nav;
+
+        var mnv = go.AddComponent<MapNodeView>();
+
+        // Type label
+        var labelRT = new GameObject("TypeLabel", typeof(RectTransform)).GetComponent<RectTransform>();
+        labelRT.SetParent(go.transform, false);
+        SetAnchors(labelRT, new Vector2(0.05f, 0.20f), new Vector2(0.95f, 0.80f));
+        var labelTMP = labelRT.gameObject.AddComponent<TextMeshProUGUI>();
+        labelTMP.text             = "Battle";
+        labelTMP.fontSize         = 10f;
+        labelTMP.fontStyle        = FontStyles.Bold;
+        labelTMP.alignment        = TextAlignmentOptions.Center;
+        labelTMP.color            = Color.black;
+        labelTMP.textWrappingMode = TextWrappingModes.Normal;
+
+        // Wire MapNodeView
+        var so = new SerializedObject(mnv);
+        so.FindProperty("_button").objectReferenceValue     = btn;
+        so.FindProperty("_typeLabel").objectReferenceValue  = labelTMP;
+        so.FindProperty("_background").objectReferenceValue = bg;
+        so.ApplyModifiedPropertiesWithoutUndo();
+
+        return SavePrefab(go, path);
+    }
+
+    private static GameObject LoadOrBuildMapEdgePrefab()
+    {
+        const string path = "Assets/Prefabs/MapEdge.prefab";
+        var existing = AssetDatabase.LoadAssetAtPath<GameObject>(path);
+        if (existing != null) return existing;
+
+        EnsurePrefabFolder();
+
+        var go = new GameObject("MapEdge", typeof(RectTransform));
+        go.GetComponent<RectTransform>().sizeDelta = new Vector2(100f, 4f);
+
+        var img = go.AddComponent<Image>();
+        img.color = new Color(0.6f, 0.6f, 0.6f, 0.8f);
+
+        go.AddComponent<MapEdgeView>();
+
+        return SavePrefab(go, path);
+    }
+
+    // ── Shared builder helpers ────────────────────────────────────────────────
+
+    private static void EnsurePrefabFolder()
+    {
+        if (!AssetDatabase.IsValidFolder("Assets/Prefabs"))
+            AssetDatabase.CreateFolder("Assets", "Prefabs");
+    }
+
+    private static GameObject SavePrefab(GameObject go, string path)
+    {
         var prefab = PrefabUtility.SaveAsPrefabAsset(go, path);
         Object.DestroyImmediate(go);
         AssetDatabase.Refresh();
-        Debug.Log($"[DeckSaver] FragmentSwapCardSlot prefab saved to {path}");
+        Debug.Log($"[DeckSaver] Prefab saved: {path}");
         return prefab;
     }
 
-    // ── Helpers ───────────────────────────────────────────────────────────────
+    private static void SetAnchors(RectTransform rt, Vector2 min, Vector2 max)
+    {
+        rt.anchorMin = min;
+        rt.anchorMax = max;
+        rt.offsetMin = rt.offsetMax = Vector2.zero;
+    }
 
     private static GameObject CreateGO(string name)
     {
@@ -629,7 +1024,6 @@ public static class RunSceneBuilder
         rt.offsetMin = rt.offsetMax = Vector2.zero;
     }
 
-    /// <summary>Create a full-background panel with an Image.</summary>
     private static RectTransform Panel(string name, Transform parent,
         Vector2 anchorMin, Vector2 anchorMax, Color color)
     {
@@ -649,9 +1043,9 @@ public static class RunSceneBuilder
         rt.anchorMax = max;
         rt.offsetMin = rt.offsetMax = Vector2.zero;
         var tmp = rt.gameObject.AddComponent<TextMeshProUGUI>();
-        tmp.text      = text;
-        tmp.fontSize  = fontSize;
-        tmp.color     = color;
+        tmp.text     = text;
+        tmp.fontSize = fontSize;
+        tmp.color    = color;
         if (bold) tmp.fontStyle = FontStyles.Bold;
         return tmp;
     }
