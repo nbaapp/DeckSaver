@@ -42,12 +42,6 @@ public class CardPlayManager : MonoBehaviour
         // Still waiting for the player to pick which unit uses the card — don't resolve yet.
         if (GridInputHandler.Instance?.IsAwaitingUnit == true) return;
 
-        // If the player clicked any player unit's tile, let PlayerMovementHandler
-        // handle the unit switch — don't consume the click here.
-        var entityOnTile = EntityManager.Instance.GetEntityAt(tile.GridPosition);
-        if (entityOnTile is PlayerEntity)
-            return;
-
         // A selected unit is required before a card can resolve.
         if (PlayerParty.Instance?.SelectedUnit == null) return;
 
