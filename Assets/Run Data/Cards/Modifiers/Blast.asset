@@ -35,11 +35,10 @@ MonoBehaviour:
     modifiers: []
   - position: {x: 1, y: 1}
     modifiers: []
-  globalModifiers:
-  - type: 0
-    value: 0
-  - type: 0
-    value: 0
+  globalModifiers: []
   baseCost: 0
   movesPlayer: 0
   moveDistance: 1
+  shopPrice: 0
+  upgradeVersion: {fileID: 0}
+  baseVersion: {fileID: 0}
