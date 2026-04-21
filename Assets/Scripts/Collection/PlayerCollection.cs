@@ -98,8 +98,20 @@ public class PlayerCollection : ScriptableObject
         if (card.modifierFragment != null) AddModifier(card.modifierFragment);
     }
 
-    // Commanders permanently unlocked between runs
+    // Commanders permanently unlocked through progression milestones
     public List<CommanderData> ownedCommanders = new();
+
+    /// <summary>
+    /// Unlocks a commander for use in future runs.
+    /// Called by progression/milestone systems when the player meets unlock requirements.
+    /// Returns false if already owned.
+    /// </summary>
+    public bool UnlockCommander(CommanderData commander)
+    {
+        if (commander == null || ownedCommanders.Contains(commander)) return false;
+        ownedCommanders.Add(commander);
+        return true;
+    }
 
     // --- Helpers ---
 

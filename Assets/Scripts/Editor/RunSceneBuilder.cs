@@ -787,6 +787,10 @@ public static class RunSceneBuilder
 
         go.GetComponent<RectTransform>().sizeDelta = new Vector2(140f, 200f);
 
+        var le = go.AddComponent<LayoutElement>();
+        le.preferredWidth  = 140f;
+        le.preferredHeight = 200f;
+
         return SavePrefab(go, path);
     }
 
@@ -1064,7 +1068,7 @@ public static class RunSceneBuilder
         vpRT.anchorMin = Vector2.zero;
         vpRT.anchorMax = Vector2.one;
         vpRT.offsetMin = vpRT.offsetMax = Vector2.zero;
-        vpRT.gameObject.AddComponent<Image>().color = Color.clear;
+        vpRT.gameObject.AddComponent<Image>().color = Color.white;
         vpRT.gameObject.AddComponent<Mask>().showMaskGraphic = false;
         scroll.viewport = vpRT;
 

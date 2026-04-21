@@ -56,13 +56,14 @@ public class HubUI : MonoBehaviour
         if (_confirmButtonLabel != null)
         {
             int filled = state.FilledSlotCount();
-            int empty  = DeckData.MaxSize - filled;
+            int emptyCustom = state.CustomSlotCount - filled;
+            int totalDefaults = emptyCustom + (state.TotalDeckSize - state.CustomSlotCount);
             if (!ready)
                 _confirmButtonLabel.text = "Start Run (no commander)";
-            else if (empty == 0)
+            else if (totalDefaults == 0)
                 _confirmButtonLabel.text = "Start Run";
             else
-                _confirmButtonLabel.text = $"Start Run ({empty} default{(empty == 1 ? "" : "s")})";
+                _confirmButtonLabel.text = $"Start Run ({filled}/{state.CustomSlotCount} custom)";
         }
     }
 

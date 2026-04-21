@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: Test Deck
   m_EditorClassIdentifier: Assembly-CSharp::DeckData
   deckName: Test Deck
-  commander: {fileID: 11400000, guid: c964c6987ee7049c7ba014b78bfb1821, type: 2}
+  commander: {fileID: 11400000, guid: 8846dc4e788a942daae301f16e58dd5f, type: 2}
   cards:
   - {fileID: 11400000, guid: cc14cc140000000000000000cc14cc14, type: 2}
   - {fileID: 11400000, guid: cc0acc0a0000000000000000cc0acc0a, type: 2}

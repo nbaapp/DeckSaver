@@ -75,7 +75,6 @@ public static class HubSceneSetup
         // ── Prefabs ───────────────────────────────────────────────────────────
         var tokenPrefab = CreateFragmentTokenPrefab();
         var slotPrefab  = CreateCardSlotPrefab();
-        var entryPrefab = CreateCommanderEntryPrefab();
 
         // ── Top-level panels ──────────────────────────────────────────────────
         var collectionPanel = Panel(canvasGo.transform, "CollectionPanel", 0f,    0.08f, 0.38f, 1f,    new Color(0.13f, 0.13f, 0.16f));
@@ -87,7 +86,7 @@ public static class HubSceneSetup
             out var effectsGrid, out var modsGrid);
 
         // ── Deck panel ────────────────────────────────────────────────────────
-        BuildDeckPanel(deckPanel, slotPrefab, entryPrefab,
+        BuildDeckPanel(deckPanel, slotPrefab,
             out var slotsParent, out var slotCountTmp,
             out var previewRoot, out var previewName,
             out var previewDesc, out var previewCost);
@@ -130,8 +129,6 @@ public static class HubSceneSetup
         else
             Debug.LogWarning("[HubSetup] No PlayerCollection asset found — assign manually.");
 
-        var registry = GetOrCreateCommanderRegistry();
-        Wire(state, "commanderRegistry", registry);
 
         // ── Create PlayerCollection if missing ────────────────────────────────
         if (collGuids.Length == 0)
@@ -142,6 +139,18 @@ public static class HubSceneSetup
             Wire(state, "collection", coll);
             Debug.Log("[HubSetup] Created default PlayerCollection asset.");
         }
+
+        // ── Wire BasicFragmentPool ────────────────────────────────────────────
+        var poolGuids = AssetDatabase.FindAssets("t:BasicFragmentPool");
+        if (poolGuids.Length > 0)
+        {
+            var pool = AssetDatabase.LoadAssetAtPath<BasicFragmentPool>(
+                AssetDatabase.GUIDToAssetPath(poolGuids[0]));
+            Wire(state, "basicFragmentPool", pool);
+            Debug.Log($"[HubSetup] Wired BasicFragmentPool: {pool.name}");
+        }
+        else
+            Debug.LogWarning("[HubSetup] No BasicFragmentPool asset found — create one and assign manually.");
 
         // ── Save ──────────────────────────────────────────────────────────────
         EditorSceneManager.MarkSceneDirty(scene);
@@ -218,7 +227,7 @@ public static class HubSceneSetup
     // Deck panel
     // =========================================================================
 
-    static void BuildDeckPanel(GameObject panel, GameObject slotPrefab, GameObject entryPrefab,
+    static void BuildDeckPanel(GameObject panel, GameObject slotPrefab,
         out GameObject slotsParent,    out TextMeshProUGUI slotCount,
         out GameObject previewRoot,    out TextMeshProUGUI previewName,
         out TextMeshProUGUI previewDesc, out TextMeshProUGUI previewCost)
@@ -240,7 +249,7 @@ public static class HubSceneSetup
         // Commander area
         var cmdArea = Anchored(panel.transform, "CommanderArea", 0f, 0.71f, 1f, 0.94f);
         cmdArea.AddComponent<UImg>().color = new Color(0.15f, 0.12f, 0.08f);
-        BuildCommanderArea(cmdArea, entryPrefab);
+        BuildCommanderArea(cmdArea);
 
         // Slots grid
         slotsParent = Anchored(panel.transform, "SlotsParent", 0.005f, 0.005f, 0.995f, 0.71f);
@@ -269,53 +278,84 @@ public static class HubSceneSetup
         previewDesc.textWrappingMode = TextWrappingModes.Normal;
     }
 
-    static void BuildCommanderArea(GameObject area, GameObject entryPrefab)
+    static void BuildCommanderArea(GameObject area)
     {
         // Header label
-        Tmp(Anchored(area.transform, "Header", 0f, 0.78f, 1f, 1f),
+        Tmp(Anchored(area.transform, "Header", 0f, 0.82f, 1f, 1f),
             "COMMANDER", 15, FontStyles.Bold, TextAlignmentOptions.Center,
             new Color(1f, 0.85f, 0.4f));
 
-        // Draft drop zones (left 60%)
-        var zonesRow = Anchored(area.transform, "DraftZones", 0f, 0.22f, 0.60f, 0.78f);
-        zonesRow.AddComponent<UImg>().color = Color.clear;
-        var zhl = zonesRow.AddComponent<UHoriz>();
-        zhl.spacing = 4; zhl.padding = new RectOffset(4, 4, 4, 4);
-        zhl.childForceExpandWidth = zhl.childForceExpandHeight = true;
+        // Dropdown
+        var dropdownGo = Anchored(area.transform, "CommanderDropdown", 0.04f, 0.50f, 0.96f, 0.80f);
+        dropdownGo.AddComponent<UImg>().color = new Color(0.18f, 0.18f, 0.22f);
 
-        var (effGo, effBg, effLbl) = DropZoneGO(zonesRow.transform, "EffectZone",   "Effect");
-        var effDZ = effGo.AddComponent<FragmentDropZone>();
-        WireDZ(effDZ, effBg, effLbl);
+        var dropdown = dropdownGo.AddComponent<TMP_Dropdown>();
 
-        var (modGo, modBg, modLbl) = DropZoneGO(zonesRow.transform, "ModifierZone", "Modifier");
-        var modDZ = modGo.AddComponent<FragmentDropZone>();
-        WireDZ(modDZ, modBg, modLbl);
+        var captionGo = Anchored(dropdownGo.transform, "Label", 0.05f, 0f, 0.85f, 1f);
+        var captionTmp = Tmp(captionGo, "-- Select Commander --", 13, FontStyles.Normal,
+            TextAlignmentOptions.MidlineLeft, Color.white);
+        dropdown.captionText = captionTmp;
 
-        // Forge controls (right 40%)
-        var forgeArea = Anchored(area.transform, "ForgeArea", 0.60f, 0.22f, 1f, 0.78f);
-        forgeArea.AddComponent<UImg>().color = Color.clear;
-        VLayout(forgeArea, 4, 4, 4);
+        var arrowGo = Anchored(dropdownGo.transform, "Arrow", 0.88f, 0.25f, 0.96f, 0.75f);
+        Tmp(arrowGo, "\u25BC", 12, FontStyles.Normal,
+            TextAlignmentOptions.Center, new Color(0.7f, 0.7f, 0.7f));
 
-        var matchGo  = LayoutChild(forgeArea.transform, "MatchLabel", 0, 20);
-        var matchTmp = Tmp(matchGo, "", 11, FontStyles.Normal, TextAlignmentOptions.Center,
-            new Color(1f, 0.85f, 0.4f));
-        matchGo.SetActive(false);
+        // Template popup
+        var templateGo = Anchored(dropdownGo.transform, "Template", 0f, 0f, 1f, 0f);
+        var templateRt = templateGo.GetComponent<RectTransform>();
+        templateRt.pivot = new Vector2(0.5f, 1f);
+        templateRt.anchorMin = new Vector2(0f, 0f);
+        templateRt.anchorMax = new Vector2(1f, 0f);
+        templateRt.offsetMin = templateRt.offsetMax = Vector2.zero;
+        templateRt.sizeDelta = new Vector2(0, 150);
+        templateGo.AddComponent<UImg>().color = new Color(0.14f, 0.14f, 0.18f);
+        var scrollRect = templateGo.AddComponent<UnityEngine.UI.ScrollRect>();
+        templateGo.SetActive(false);
 
-        var forgeBtnGo = LayoutChild(forgeArea.transform, "ForgeButton", 0, 30);
-        forgeBtnGo.AddComponent<UImg>().color = new Color(0.55f, 0.38f, 0.08f);
-        var forgeBtn   = forgeBtnGo.AddComponent<UBtn>();
-        forgeBtnGo.SetActive(false);
-        var forgeLbl   = Tmp(FullChild(forgeBtnGo.transform, "Label"), "Forge Commander",
-            11, FontStyles.Bold, TextAlignmentOptions.Center, Color.white);
+        var viewportGo = FullChild(templateGo.transform, "Viewport");
+        viewportGo.AddComponent<UImg>().color = Color.white;
+        viewportGo.AddComponent<UnityEngine.UI.Mask>().showMaskGraphic = false;
 
-        var pickGo = LayoutChild(forgeArea.transform, "OpenPickerButton", 0, 26);
-        pickGo.AddComponent<UImg>().color = new Color(0.2f, 0.3f, 0.4f);
-        var openPickerBtn = pickGo.AddComponent<UBtn>();
-        Tmp(FullChild(pickGo.transform, "Label"), "Select Owned [v]",
-            11, FontStyles.Normal, TextAlignmentOptions.Center, Color.white);
+        var contentGo = FullChild(viewportGo.transform, "Content");
+        var contentRt = contentGo.GetComponent<RectTransform>();
+        contentRt.pivot = new Vector2(0.5f, 1f);
+        contentRt.anchorMin = new Vector2(0f, 1f);
+        contentRt.anchorMax = new Vector2(1f, 1f);
+        contentRt.offsetMin = contentRt.offsetMax = Vector2.zero;
+        contentRt.sizeDelta = new Vector2(0, 28);
 
-        // Selected panel (bottom strip)
-        var selPanel = Anchored(area.transform, "SelectedPanel", 0f, 0f, 0.72f, 0.22f);
+        var itemGo = Anchored(contentGo.transform, "Item", 0f, 0f, 1f, 0f);
+        var itemRt = itemGo.GetComponent<RectTransform>();
+        itemRt.sizeDelta = new Vector2(0, 28);
+        itemGo.AddComponent<UImg>().color = new Color(0.18f, 0.18f, 0.22f);
+
+        var itemBgGo = FullChild(itemGo.transform, "Item Background");
+        var itemBgImg = itemBgGo.AddComponent<UImg>();
+        itemBgImg.color = new Color(0.25f, 0.35f, 0.5f, 0.6f);
+
+        var checkGo = Anchored(itemGo.transform, "Item Checkmark", 0.02f, 0.2f, 0.08f, 0.8f);
+        var checkTmp = Tmp(checkGo, "\u2713", 12, FontStyles.Normal,
+            TextAlignmentOptions.Center, new Color(1f, 0.85f, 0.4f));
+
+        var itemLabelGo = Anchored(itemGo.transform, "Item Label", 0.10f, 0f, 0.95f, 1f);
+        var itemLabelTmp = Tmp(itemLabelGo, "", 13, FontStyles.Normal,
+            TextAlignmentOptions.MidlineLeft, Color.white);
+
+        var itemToggle = itemGo.AddComponent<UnityEngine.UI.Toggle>();
+        itemToggle.targetGraphic = itemBgImg;
+        itemToggle.graphic = checkTmp;
+        itemToggle.isOn = true;
+
+        scrollRect.content    = contentRt;
+        scrollRect.viewport   = viewportGo.GetComponent<RectTransform>();
+        scrollRect.horizontal = false;
+        scrollRect.movementType = UnityEngine.UI.ScrollRect.MovementType.Clamped;
+
+        dropdown.template = templateRt;
+        dropdown.itemText = itemLabelTmp;
+
+        // Selected commander display (bottom strip)
+        var selPanel = Anchored(area.transform, "SelectedPanel", 0f, 0f, 1f, 0.48f);
         selPanel.AddComponent<UImg>().color = new Color(0.2f, 0.15f, 0.05f);
         selPanel.SetActive(false);
         var shl = selPanel.AddComponent<UHoriz>();
@@ -323,7 +363,7 @@ public static class HubSceneSetup
         shl.spacing = 8; shl.padding = new RectOffset(8, 4, 3, 3);
 
         var selNameGo = LayoutChild(selPanel.transform, "SelectedName", 0, 0);
-        selNameGo.GetComponent<ULE>().preferredWidth = 130;
+        selNameGo.GetComponent<ULE>().preferredWidth = 160;
         var selNameTmp = Tmp(selNameGo, "", 13, FontStyles.Bold,
             TextAlignmentOptions.MidlineLeft, new Color(1f, 0.85f, 0.4f));
 
@@ -333,38 +373,12 @@ public static class HubSceneSetup
             TextAlignmentOptions.MidlineLeft, new Color(0.7f, 1f, 0.7f));
         selPassTmp.textWrappingMode = TextWrappingModes.Normal;
 
-        var clearGo = LayoutChild(selPanel.transform, "ClearButton", 0, 0);
-        clearGo.GetComponent<ULE>().preferredWidth = 36;
-        clearGo.AddComponent<UImg>().color = new Color(0.5f, 0.2f, 0.2f);
-        var clearBtn = clearGo.AddComponent<UBtn>();
-        Tmp(FullChild(clearGo.transform, "Label"), "×",
-            16, FontStyles.Bold, TextAlignmentOptions.Center, Color.white);
-
-        // Owned picker popup
-        var pickerRoot = Anchored(area.transform, "OwnedPickerRoot", 0f, 0f, 0.72f, 0.78f);
-        pickerRoot.AddComponent<UImg>().color = new Color(0.10f, 0.10f, 0.14f, 0.98f);
-        pickerRoot.SetActive(false);
-        VLayout(pickerRoot, 4, 4, 2);
-
-        var listGo = Child(pickerRoot.transform, "List");
-        listGo.AddComponent<UImg>().color = Color.clear;
-        VLayout(listGo, 0, 0, 2);
-
         // Wire CommanderSlotView
         var csv = area.AddComponent<CommanderSlotView>();
-        Wire(csv, "_effectZone",           effDZ);
-        Wire(csv, "_modifierZone",         modDZ);
-        Wire(csv, "_forgeButton",          forgeBtn);
-        Wire(csv, "_forgeButtonLabel",     forgeLbl);
-        Wire(csv, "_matchLabel",           matchTmp);
+        Wire(csv, "_commanderDropdown",    dropdown);
         Wire(csv, "_selectedPanel",        selPanel);
         Wire(csv, "_selectedNameLabel",    selNameTmp);
         Wire(csv, "_selectedPassiveLabel", selPassTmp);
-        Wire(csv, "_clearSelectionButton", clearBtn);
-        Wire(csv, "_ownedPickerRoot",      pickerRoot);
-        Wire(csv, "_ownedListParent",      listGo.transform);
-        Wire(csv, "_ownedEntryPrefab",     entryPrefab);
-        Wire(csv, "_openPickerButton",     openPickerBtn);
     }
 
     // =========================================================================
@@ -537,52 +551,6 @@ public static class HubSceneSetup
         Object.DestroyImmediate(root);
         Debug.Log("[HubSetup] Created CardSlot prefab.");
         return prefab;
-    }
-
-    static GameObject CreateCommanderEntryPrefab()
-    {
-        const string path = "Assets/Prefabs/CommanderEntry.prefab";
-        var existing = AssetDatabase.LoadAssetAtPath<GameObject>(path);
-        if (existing != null) return existing;
-
-        var root = new GameObject("CommanderEntry");
-        root.AddComponent<RectTransform>().sizeDelta = new Vector2(200, 36);
-        root.AddComponent<UImg>().color = new Color(0.2f, 0.2f, 0.25f);
-        root.AddComponent<ULE>().preferredHeight = 36;
-        root.AddComponent<UBtn>();
-
-        var lbl = Child(root.transform, "Label");
-        FullRect(lbl.GetComponent<RectTransform>());
-        lbl.GetComponent<RectTransform>().offsetMin = new Vector2(8, 0);
-        Tmp(lbl, "", 14, FontStyles.Normal, TextAlignmentOptions.MidlineLeft, Color.white);
-
-        var prefab = PrefabUtility.SaveAsPrefabAsset(root, path);
-        Object.DestroyImmediate(root);
-        Debug.Log("[HubSetup] Created CommanderEntry prefab.");
-        return prefab;
-    }
-
-    // =========================================================================
-    // CommanderRegistry
-    // =========================================================================
-
-    static CommanderRegistry GetOrCreateCommanderRegistry()
-    {
-        const string path = "Assets/Cards/CommanderRegistry.asset";
-        var reg = AssetDatabase.LoadAssetAtPath<CommanderRegistry>(path);
-        if (reg != null) return reg;
-
-        reg = ScriptableObject.CreateInstance<CommanderRegistry>();
-        foreach (var guid in AssetDatabase.FindAssets("t:CommanderData"))
-        {
-            var cmd = AssetDatabase.LoadAssetAtPath<CommanderData>(
-                AssetDatabase.GUIDToAssetPath(guid));
-            if (cmd != null) reg.allCommanders.Add(cmd);
-        }
-        AssetDatabase.CreateAsset(reg, path);
-        AssetDatabase.SaveAssets();
-        Debug.Log($"[HubSetup] Created CommanderRegistry with {reg.allCommanders.Count} commanders.");
-        return reg;
     }
 
     // =========================================================================

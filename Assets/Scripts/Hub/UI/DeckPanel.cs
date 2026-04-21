@@ -4,16 +4,16 @@ using UnityEngine;
 /// <summary>
 /// The right panel in the hub deckbuilder.
 ///
-/// Spawns 20 CardSlotViews and manages single-selection among them.
-/// The CommanderSlotView is placed in the scene separately (not spawned here).
-/// Also owns the card preview panel, which it populates when a slot is selected.
+/// Spawns card slots: the first CustomSlotCount are editable (for player-built cards),
+/// the rest up to TotalDeckSize are locked and display as auto-fill Strike/Block cards.
+/// Also owns the card preview panel.
 /// </summary>
 public class DeckPanel : MonoBehaviour
 {
     [Header("References")]
     [SerializeField] private Transform        _slotsParent;
     [SerializeField] private GameObject       _cardSlotPrefab;
-    [SerializeField] private TMP_Text         _slotCountLabel;  // e.g. "12 / 20"
+    [SerializeField] private TMP_Text         _slotCountLabel;  // e.g. "3 / 5"
 
     [Header("Preview panel")]
     [SerializeField] private GameObject _previewRoot;
@@ -21,8 +21,10 @@ public class DeckPanel : MonoBehaviour
     [SerializeField] private TMP_Text   _previewDescLabel;
     [SerializeField] private TMP_Text   _previewCostLabel;
 
-    private readonly CardSlotView[] _slots = new CardSlotView[DeckData.MaxSize];
+    private CardSlotView[] _slots;
     private CardSlotView _selectedSlot;
+
+    private static readonly Color BasicColor = new(0.4f, 0.4f, 0.45f);
 
     // -------------------------------------------------------------------------
 
@@ -44,19 +46,32 @@ public class DeckPanel : MonoBehaviour
 
     void SpawnSlots()
     {
-        for (int i = 0; i < DeckData.MaxSize; i++)
+        var state = HubDeckBuilderState.Instance;
+        int total  = state.TotalDeckSize;
+        int custom = state.CustomSlotCount;
+
+        _slots = new CardSlotView[total];
+
+        for (int i = 0; i < total; i++)
         {
             var go   = Instantiate(_cardSlotPrefab, _slotsParent);
             var slot = go.GetComponent<CardSlotView>();
             slot.Init(i);
             slot.OnSelected = OnSlotSelected;
             _slots[i] = slot;
+
+            if (i >= custom)
+            {
+                slot.SetLocked(true);
+                slot.SetLockedDisplay("Basic", BasicColor);
+            }
         }
     }
 
     void OnSlotSelected(CardSlotView slot)
     {
-        // Deselect previous
+        if (slot.IsLocked) return;
+
         if (_selectedSlot != null && _selectedSlot != slot)
             _selectedSlot.SetSelected(false);
 
@@ -70,9 +85,10 @@ public class DeckPanel : MonoBehaviour
     void RefreshSlotCount()
     {
         if (_slotCountLabel == null) return;
-        int filled = HubDeckBuilderState.Instance.FilledSlotCount();
-        _slotCountLabel.text = $"{filled} / {DeckData.MaxSize}";
-        RefreshPreview(); // slot content may have changed
+        var state = HubDeckBuilderState.Instance;
+        int filled = state.FilledSlotCount();
+        _slotCountLabel.text = $"{filled} / {state.CustomSlotCount}";
+        RefreshPreview();
     }
 
     void RefreshPreview()

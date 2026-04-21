@@ -7,10 +7,6 @@ public class CommanderData : ScriptableObject
     public string commanderName;
     public Sprite artwork;
 
-    // The specific effect+modifier pair that creates this Commander during deckbuilding.
-    public EffectFragmentData sourceEffect;
-    public ModifierFragmentData sourceModifier;
-
     [Header("Active Ability")]
     [TextArea] public string activeFlavorText;
     public int activesPerBattle = 1;

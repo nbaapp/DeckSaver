@@ -28,9 +28,8 @@ public class HubDragController : MonoBehaviour
     public bool IsDragging    => DraggedEffect != null || DraggedModifier != null;
     public bool IsEffectDrag  => DraggedEffect != null;
 
-    // Where the drag originated: -1 = collection, -2 = commander slot, 0..19 = normal slot
+    // Where the drag originated: -1 = collection, 0+ = normal slot
     public int  SourceSlotIndex      { get; private set; } = -1;
-    public bool SourceIsCommanderSlot => SourceSlotIndex == -2;
 
     private bool _wasDropped;
 
@@ -117,12 +116,7 @@ public class HubDragController : MonoBehaviour
             if (IsEffectDrag) state.ClearSlotEffect(SourceSlotIndex);
             else              state.ClearSlotModifier(SourceSlotIndex);
         }
-        else if (SourceIsCommanderSlot)
-        {
-            if (IsEffectDrag) state.ClearCommanderDraftEffect();
-            else              state.ClearCommanderDraftModifier();
-        }
-        // Source == collection: nothing to clear
+        // Source == collection (-1): nothing to clear
     }
 
     void RestoreSource()
@@ -135,12 +129,7 @@ public class HubDragController : MonoBehaviour
             if (IsEffectDrag) state.TryAssignEffect(SourceSlotIndex,   DraggedEffect);
             else              state.TryAssignModifier(SourceSlotIndex, DraggedModifier);
         }
-        else if (SourceIsCommanderSlot)
-        {
-            if (IsEffectDrag) state.TryAssignCommanderEffect(DraggedEffect);
-            else              state.TryAssignCommanderModifier(DraggedModifier);
-        }
-        // Source == collection: nothing to restore; fragment was never removed
+        // Source == collection (-1): nothing to restore; fragment was never removed
     }
 
     void CreateGhost(string label, Color color)

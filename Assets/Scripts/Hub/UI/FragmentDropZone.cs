@@ -9,8 +9,7 @@ using UnityEngine.UI;
 /// Acts as both a drop target (IDropHandler) and a drag source for re-dragging
 /// an already-placed fragment (IBeginDragHandler / IEndDragHandler).
 ///
-/// The slot index matches its parent CardSlotView; use slotIndex = -2 for the
-/// commander slot (CommanderSlotView manages that separately via override hooks).
+/// The slot index matches its parent CardSlotView.
 /// </summary>
 [RequireComponent(typeof(Image))]
 public class FragmentDropZone : MonoBehaviour,
@@ -22,7 +21,7 @@ public class FragmentDropZone : MonoBehaviour,
 
     [Header("Config")]
     public ZoneType zoneType;
-    public int      slotIndex; // 0-19 for normal slots, -2 for commander slot
+    public int      slotIndex;
 
     [Header("References")]
     [SerializeField] private Image    _background;
@@ -58,35 +57,17 @@ public class FragmentDropZone : MonoBehaviour,
         string fragmentName = null;
         bool   filled       = false;
 
-        if (slotIndex >= 0)
+        if (zoneType == ZoneType.Effect)
         {
-            if (zoneType == ZoneType.Effect)
-            {
-                var e = state.GetSlotEffect(slotIndex);
-                fragmentName = e?.fragmentName;
-                filled       = e != null;
-            }
-            else
-            {
-                var m = state.GetSlotModifier(slotIndex);
-                fragmentName = m?.fragmentName;
-                filled       = m != null;
-            }
+            var e = state.GetSlotEffect(slotIndex);
+            fragmentName = e?.fragmentName;
+            filled       = e != null;
         }
-        else // commander slot
+        else
         {
-            if (zoneType == ZoneType.Effect)
-            {
-                var e = state.CmdDraftEffect;
-                fragmentName = e?.fragmentName;
-                filled       = e != null;
-            }
-            else
-            {
-                var m = state.CmdDraftModifier;
-                fragmentName = m?.fragmentName;
-                filled       = m != null;
-            }
+            var m = state.GetSlotModifier(slotIndex);
+            fragmentName = m?.fragmentName;
+            filled       = m != null;
         }
 
         _label.text       = filled ? fragmentName : (zoneType == ZoneType.Effect ? "Effect" : "Modifier");
@@ -101,25 +82,13 @@ public class FragmentDropZone : MonoBehaviour,
         var drag = HubDragController.Instance;
         if (drag == null || !drag.IsDragging) return;
 
-        // Type check
         if (zoneType == ZoneType.Effect   && !drag.IsEffectDrag)  return;
         if (zoneType == ZoneType.Modifier &&  drag.IsEffectDrag)  return;
 
         var state = HubDeckBuilderState.Instance;
-        bool accepted;
-
-        if (slotIndex >= 0)
-        {
-            accepted = zoneType == ZoneType.Effect
-                ? state.TryAssignEffect(slotIndex,   drag.DraggedEffect)
-                : state.TryAssignModifier(slotIndex, drag.DraggedModifier);
-        }
-        else // commander slot
-        {
-            accepted = zoneType == ZoneType.Effect
-                ? state.TryAssignCommanderEffect(drag.DraggedEffect)
-                : state.TryAssignCommanderModifier(drag.DraggedModifier);
-        }
+        bool accepted = zoneType == ZoneType.Effect
+            ? state.TryAssignEffect(slotIndex,   drag.DraggedEffect)
+            : state.TryAssignModifier(slotIndex, drag.DraggedModifier);
 
         if (accepted)
         {
@@ -137,35 +106,17 @@ public class FragmentDropZone : MonoBehaviour,
         var drag  = HubDragController.Instance;
         if (state == null || drag == null) return;
 
-        if (slotIndex >= 0)
+        if (zoneType == ZoneType.Effect)
         {
-            if (zoneType == ZoneType.Effect)
-            {
-                var e = state.GetSlotEffect(slotIndex);
-                if (e == null) return;
-                drag.BeginEffectDrag(e, slotIndex);
-            }
-            else
-            {
-                var m = state.GetSlotModifier(slotIndex);
-                if (m == null) return;
-                drag.BeginModifierDrag(m, slotIndex);
-            }
+            var e = state.GetSlotEffect(slotIndex);
+            if (e == null) return;
+            drag.BeginEffectDrag(e, slotIndex);
         }
-        else // commander slot
+        else
         {
-            if (zoneType == ZoneType.Effect)
-            {
-                var e = state.CmdDraftEffect;
-                if (e == null) return;
-                drag.BeginEffectDrag(e, -2);
-            }
-            else
-            {
-                var m = state.CmdDraftModifier;
-                if (m == null) return;
-                drag.BeginModifierDrag(m, -2);
-            }
+            var m = state.GetSlotModifier(slotIndex);
+            if (m == null) return;
+            drag.BeginModifierDrag(m, slotIndex);
         }
     }
 

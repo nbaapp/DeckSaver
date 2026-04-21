@@ -1,0 +1,28 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: cf0f4c0d5d21d4fd1b645e8a105b91ea, type: 3}
+  m_Name: Smack
+  m_EditorClassIdentifier: Assembly-CSharp::ModifierFragmentData
+  fragmentName: Smack
+  flavorText: 1 tile adjacent to user
+  artwork: {fileID: 0}
+  placementType: 1
+  tiles:
+  - position: {x: 0, y: 1}
+    modifiers: []
+  globalModifiers: []
+  baseCost: 0
+  movesPlayer: 0
+  moveDistance: 1
+  shopPrice: 0
+  upgradeVersion: {fileID: 0}
+  baseVersion: {fileID: 0}

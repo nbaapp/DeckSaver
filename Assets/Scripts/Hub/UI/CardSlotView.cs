@@ -24,12 +24,14 @@ public class CardSlotView : MonoBehaviour, IPointerClickHandler
     public int SlotIndex { get; private set; }
 
     public bool IsSelected { get; private set; }
+    public bool IsLocked   { get; private set; }
 
     // Invoked when this slot is clicked so DeckPanel can manage single-selection
     public System.Action<CardSlotView> OnSelected;
 
     private static readonly Color NormalBg   = new(0.18f, 0.18f, 0.18f, 1f);
     private static readonly Color SelectedBg = new(0.25f, 0.30f, 0.35f, 1f);
+    private static readonly Color LockedBg   = new(0.12f, 0.12f, 0.12f, 1f);
 
     // -------------------------------------------------------------------------
 
@@ -59,19 +61,37 @@ public class CardSlotView : MonoBehaviour, IPointerClickHandler
 
     // -------------------------------------------------------------------------
 
+    /// <summary>
+    /// Locks the slot so it cannot be interacted with (used for auto-fill slots).
+    /// </summary>
+    public void SetLocked(bool locked)
+    {
+        IsLocked = locked;
+        if (_effectZone   != null) _effectZone.gameObject.SetActive(!locked);
+        if (_modifierZone != null) _modifierZone.gameObject.SetActive(!locked);
+        _background.color = locked ? LockedBg : NormalBg;
+    }
+
     public void SetSelected(bool selected)
     {
+        if (IsLocked) return;
         IsSelected = selected;
         _background.color = selected ? SelectedBg : NormalBg;
         if (_selectedIndicator != null) _selectedIndicator.SetActive(selected);
     }
 
-    public void OnPointerClick(PointerEventData _) => OnSelected?.Invoke(this);
+    public void OnPointerClick(PointerEventData _)
+    {
+        if (IsLocked) return;
+        OnSelected?.Invoke(this);
+    }
 
     // -------------------------------------------------------------------------
 
     void RefreshPreview()
     {
+        if (IsLocked) return; // locked slots don't update from draft state
+
         var state = HubDeckBuilderState.Instance;
         if (state == null) return;
 
@@ -83,5 +103,13 @@ public class CardSlotView : MonoBehaviour, IPointerClickHandler
 
         if (_colorBar != null)
             _colorBar.color = full ? state.PreviewSlotColor(SlotIndex) : Color.gray;
+    }
+
+    /// <summary>Sets display for a locked auto-fill slot (Strike or Block).</summary>
+    public void SetLockedDisplay(string cardName, Color color)
+    {
+        if (_cardNameLabel != null) _cardNameLabel.text = cardName;
+        if (_colorBar      != null) _colorBar.color     = color;
+        if (_costLabel     != null) _costLabel.text      = "1";
     }
 }

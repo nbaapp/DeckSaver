@@ -1,0 +1,23 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9304f1a3787264aefa9600071c5ba531, type: 3}
+  m_Name: BasicFragments
+  m_EditorClassIdentifier: Assembly-CSharp::BasicFragmentPool
+  basicEffects:
+  - {fileID: 11400000, guid: bcab16a19503848f3a382cef0e104add, type: 2}
+  - {fileID: 11400000, guid: dc9a70d47b8d846d380e96291438b4ba, type: 2}
+  basicModifiers:
+  - {fileID: 11400000, guid: d63e4727614ff4181a3272348d230ee1, type: 2}
+  - {fileID: 11400000, guid: 67d70a270e4854507a9141ff9f777e66, type: 2}
+  excludedCombinations:
+  - effect: {fileID: 11400000, guid: dc9a70d47b8d846d380e96291438b4ba, type: 2}
+    modifier: {fileID: 11400000, guid: 67d70a270e4854507a9141ff9f777e66, type: 2}

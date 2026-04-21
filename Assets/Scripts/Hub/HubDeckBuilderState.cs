@@ -5,11 +5,12 @@ using UnityEngine;
 /// <summary>
 /// Singleton managing the draft state for hub deck building.
 ///
-/// Fragment assignments to slots are tracked without consuming them from PlayerCollection
-/// until the player confirms the deck (ConfirmDeck).
+/// The player builds a small number of custom cards (CustomSlotCount) from fragments.
+/// The remaining slots up to TotalDeckSize are auto-filled with basic Strike/Block cards.
+/// Commanders are selected from the player's unlocked collection — no forging.
 ///
-/// Exception: forging a Commander immediately consumes its two fragments and permanently
-/// adds the Commander to the player's collection.
+/// Fragment assignments are tracked without consuming them from PlayerCollection
+/// until the player confirms the deck (ConfirmDeck).
 /// </summary>
 public class HubDeckBuilderState : MonoBehaviour
 {
@@ -17,33 +18,36 @@ public class HubDeckBuilderState : MonoBehaviour
 
     [Header("References")]
     public PlayerCollection collection;
-    public CommanderRegistry commanderRegistry;
+    public BasicFragmentPool basicFragmentPool;
 
-    // Normal card slots (20)
-    private readonly EffectFragmentData[]   _slotEffects    = new EffectFragmentData[DeckData.MaxSize];
-    private readonly ModifierFragmentData[] _slotModifiers  = new ModifierFragmentData[DeckData.MaxSize];
+    [Header("Deck Configuration")]
+    [Tooltip("Number of custom card slots the player can build from fragments.")]
+    [SerializeField] private int _customSlotCount = 5;
 
-    // Commander slot (for forging a new commander)
-    private EffectFragmentData   _cmdDraftEffect;
-    private ModifierFragmentData _cmdDraftModifier;
+    [Tooltip("Total number of cards in the deck. Remaining slots after custom cards are auto-filled with basic fragments.")]
+    [SerializeField] private int _totalDeckSize = 20;
 
-    // Finalized commander for this run (set after forge or selecting an owned one)
+    public int CustomSlotCount => _customSlotCount;
+    public int TotalDeckSize   => _totalDeckSize;
+
+    // Custom card slots (only _customSlotCount are used)
+    private EffectFragmentData[]   _slotEffects;
+    private ModifierFragmentData[] _slotModifiers;
+
+    // Selected commander for this run
     private CommanderData _selectedCommander;
 
-    public CommanderData      SelectedCommander    => _selectedCommander;
-    public EffectFragmentData CmdDraftEffect       => _cmdDraftEffect;
-    public ModifierFragmentData CmdDraftModifier   => _cmdDraftModifier;
+    public CommanderData SelectedCommander => _selectedCommander;
 
     /// <summary>Fired whenever any draft assignment changes.</summary>
     public event Action OnStateChanged;
-
-    /// <summary>Fired after a Commander is successfully forged.</summary>
-    public event Action<CommanderData> OnCommanderForged;
 
     void Awake()
     {
         if (Instance != null) { Destroy(gameObject); return; }
         Instance = this;
+        _slotEffects   = new EffectFragmentData[_customSlotCount];
+        _slotModifiers = new ModifierFragmentData[_customSlotCount];
     }
 
     // -------------------------------------------------------------------------
@@ -53,9 +57,8 @@ public class HubDeckBuilderState : MonoBehaviour
     public int AvailableEffectCount(EffectFragmentData fragment)
     {
         int assigned = 0;
-        for (int i = 0; i < DeckData.MaxSize; i++)
+        for (int i = 0; i < _customSlotCount; i++)
             if (_slotEffects[i] == fragment) assigned++;
-        if (_cmdDraftEffect == fragment) assigned++;
         return Mathf.Max(0, collection.CountEffect(fragment) - assigned);
     }
 
@@ -63,9 +66,8 @@ public class HubDeckBuilderState : MonoBehaviour
     public int AvailableModifierCount(ModifierFragmentData fragment)
     {
         int assigned = 0;
-        for (int i = 0; i < DeckData.MaxSize; i++)
+        for (int i = 0; i < _customSlotCount; i++)
             if (_slotModifiers[i] == fragment) assigned++;
-        if (_cmdDraftModifier == fragment) assigned++;
         return Mathf.Max(0, collection.CountModifier(fragment) - assigned);
     }
 
@@ -76,7 +78,7 @@ public class HubDeckBuilderState : MonoBehaviour
     public ModifierFragmentData GetSlotModifier(int i) => _slotModifiers[i];
 
     // -------------------------------------------------------------------------
-    // Normal slot assignment
+    // Slot assignment
 
     /// <summary>
     /// Assigns an effect fragment to slot <paramref name="slotIndex"/>.
@@ -84,6 +86,7 @@ public class HubDeckBuilderState : MonoBehaviour
     /// </summary>
     public bool TryAssignEffect(int slotIndex, EffectFragmentData fragment)
     {
+        if (slotIndex < 0 || slotIndex >= _customSlotCount) return false;
         if (fragment != null && fragment != _slotEffects[slotIndex] && AvailableEffectCount(fragment) <= 0)
             return false;
         _slotEffects[slotIndex] = fragment;
@@ -97,6 +100,7 @@ public class HubDeckBuilderState : MonoBehaviour
     /// </summary>
     public bool TryAssignModifier(int slotIndex, ModifierFragmentData fragment)
     {
+        if (slotIndex < 0 || slotIndex >= _customSlotCount) return false;
         if (fragment != null && fragment != _slotModifiers[slotIndex] && AvailableModifierCount(fragment) <= 0)
             return false;
         _slotModifiers[slotIndex] = fragment;
@@ -104,95 +108,43 @@ public class HubDeckBuilderState : MonoBehaviour
         return true;
     }
 
-    public void ClearSlotEffect(int slotIndex)   { _slotEffects[slotIndex]   = null; OnStateChanged?.Invoke(); }
-    public void ClearSlotModifier(int slotIndex) { _slotModifiers[slotIndex] = null; OnStateChanged?.Invoke(); }
+    public void ClearSlotEffect(int slotIndex)
+    {
+        if (slotIndex < 0 || slotIndex >= _customSlotCount) return;
+        _slotEffects[slotIndex] = null;
+        OnStateChanged?.Invoke();
+    }
+
+    public void ClearSlotModifier(int slotIndex)
+    {
+        if (slotIndex < 0 || slotIndex >= _customSlotCount) return;
+        _slotModifiers[slotIndex] = null;
+        OnStateChanged?.Invoke();
+    }
 
     // -------------------------------------------------------------------------
-    // Commander draft assignment
+    // Commander selection
 
-    public bool TryAssignCommanderEffect(EffectFragmentData fragment)
-    {
-        if (fragment != null && fragment != _cmdDraftEffect && AvailableEffectCount(fragment) <= 0)
-            return false;
-        _cmdDraftEffect = fragment;
-        OnStateChanged?.Invoke();
-        return true;
-    }
-
-    public bool TryAssignCommanderModifier(ModifierFragmentData fragment)
-    {
-        if (fragment != null && fragment != _cmdDraftModifier && AvailableModifierCount(fragment) <= 0)
-            return false;
-        _cmdDraftModifier = fragment;
-        OnStateChanged?.Invoke();
-        return true;
-    }
-
-    public void ClearCommanderDraftEffect()   { _cmdDraftEffect   = null; OnStateChanged?.Invoke(); }
-    public void ClearCommanderDraftModifier() { _cmdDraftModifier = null; OnStateChanged?.Invoke(); }
-
-    /// <summary>The CommanderData that the current draft fragments would forge, or null.</summary>
-    public CommanderData GetDraftCommanderMatch()
-        => commanderRegistry.FindMatch(_cmdDraftEffect, _cmdDraftModifier);
-
-    // -------------------------------------------------------------------------
-    // Commander forging (immediate, permanent)
-
-    /// <summary>
-    /// Immediately consumes the two commander draft fragments and permanently unlocks the commander.
-    /// Sets it as the selected commander for this run.
-    /// Returns false if the combo is invalid or already owned.
-    /// </summary>
-    public bool TryForgeCommander()
-    {
-        var commander = GetDraftCommanderMatch();
-        if (commander == null) return false;
-
-        if (collection.ownedCommanders.Contains(commander))
-        {
-            Debug.LogWarning($"Commander '{commander.commanderName}' is already owned.");
-            return false;
-        }
-
-        if (collection.CountEffect(_cmdDraftEffect) <= 0 || collection.CountModifier(_cmdDraftModifier) <= 0)
-            return false;
-
-        collection.ConsumeEffect(_cmdDraftEffect);
-        collection.ConsumeModifier(_cmdDraftModifier);
-        collection.ownedCommanders.Add(commander);
-
-        _cmdDraftEffect   = null;
-        _cmdDraftModifier = null;
-        _selectedCommander = commander;
-
-        OnCommanderForged?.Invoke(commander);
-        OnStateChanged?.Invoke();
-        return true;
-    }
-
-    /// <summary>Selects an already-owned Commander for this run without forging.</summary>
+    /// <summary>Selects an owned Commander for this run.</summary>
     public void SelectOwnedCommander(CommanderData commander)
     {
         if (commander == null || !collection.ownedCommanders.Contains(commander)) return;
-        _cmdDraftEffect    = null;
-        _cmdDraftModifier  = null;
         _selectedCommander = commander;
         OnStateChanged?.Invoke();
     }
 
     public void ClearCommanderSelection()
     {
-        _cmdDraftEffect    = null;
-        _cmdDraftModifier  = null;
         _selectedCommander = null;
         OnStateChanged?.Invoke();
     }
 
     // -------------------------------------------------------------------------
-    // Preview helpers (no consumption, no allocation)
+    // Preview helpers
 
     public string PreviewSlotName(int slotIndex)
     {
+        if (slotIndex < 0 || slotIndex >= _customSlotCount) return null;
         var e = _slotEffects[slotIndex];
         var m = _slotModifiers[slotIndex];
         return e != null && m != null ? $"{e.fragmentName} {m.fragmentName}" : null;
@@ -200,6 +152,7 @@ public class HubDeckBuilderState : MonoBehaviour
 
     public string PreviewSlotDescription(int slotIndex)
     {
+        if (slotIndex < 0 || slotIndex >= _customSlotCount) return null;
         var e = _slotEffects[slotIndex];
         var m = _slotModifiers[slotIndex];
         if (e == null || m == null) return null;
@@ -214,6 +167,7 @@ public class HubDeckBuilderState : MonoBehaviour
 
     public int PreviewSlotManaCost(int slotIndex)
     {
+        if (slotIndex < 0 || slotIndex >= _customSlotCount) return 0;
         var e = _slotEffects[slotIndex];
         var m = _slotModifiers[slotIndex];
         if (e == null || m == null) return 0;
@@ -223,6 +177,7 @@ public class HubDeckBuilderState : MonoBehaviour
 
     public Color PreviewSlotColor(int slotIndex)
     {
+        if (slotIndex < 0 || slotIndex >= _customSlotCount) return Color.gray;
         var e = _slotEffects[slotIndex];
         return e != null ? e.effectColor : Color.gray;
     }
@@ -233,7 +188,7 @@ public class HubDeckBuilderState : MonoBehaviour
     public int FilledSlotCount()
     {
         int count = 0;
-        for (int i = 0; i < DeckData.MaxSize; i++)
+        for (int i = 0; i < _customSlotCount; i++)
             if (_slotEffects[i] != null && _slotModifiers[i] != null) count++;
         return count;
     }
@@ -242,114 +197,141 @@ public class HubDeckBuilderState : MonoBehaviour
 
     /// <summary>
     /// Consumes all assigned fragments from the player's collection and returns a runtime DeckData.
-    /// Any unfilled slots are filled with default Strike and Block cards in a 50/50 split
-    /// (ties broken randomly).
+    /// Custom slots that are unfilled, plus all remaining slots up to TotalDeckSize,
+    /// are auto-filled with cards built from the BasicFragmentPool.
     /// Returns null if no commander is selected.
     /// </summary>
     public DeckData ConfirmDeck(string deckName = "My Deck")
     {
         if (!IsReadyToConfirm()) return null;
 
-        // Determine which empty slots get defaults and in what ratio
-        var emptyIndices = new List<int>();
-        for (int i = 0; i < DeckData.MaxSize; i++)
-            if (_slotEffects[i] == null || _slotModifiers[i] == null)
-                emptyIndices.Add(i);
-
-        var defaultAssignments = BuildDefaultAssignments(emptyIndices.Count);
-
         var deck = ScriptableObject.CreateInstance<DeckData>();
         deck.deckName  = deckName;
         deck.commander = _selectedCommander;
 
-        int defaultIndex = 0;
-        for (int i = 0; i < DeckData.MaxSize; i++)
+        // Build custom cards and count how many slots need defaults
+        int emptyCustomSlots = 0;
+        for (int i = 0; i < _customSlotCount; i++)
         {
-            CardData card;
             if (_slotEffects[i] != null && _slotModifiers[i] != null)
             {
-                card = ScriptableObject.CreateInstance<CardData>();
+                var card = ScriptableObject.CreateInstance<CardData>();
                 card.effectFragment   = _slotEffects[i];
                 card.modifierFragment = _slotModifiers[i];
                 card.name             = card.CardName;
                 collection.ConsumeEffect(_slotEffects[i]);
                 collection.ConsumeModifier(_slotModifiers[i]);
+                deck.cards.Add(card);
             }
             else
             {
-                card = defaultAssignments[defaultIndex++];
+                emptyCustomSlots++;
             }
-            deck.cards.Add(card);
         }
+
+        // Fill remaining slots with basic fragment cards
+        int defaultCount = emptyCustomSlots + (_totalDeckSize - _customSlotCount);
+        var defaults = BuildBasicCards(defaultCount);
+        deck.cards.AddRange(defaults);
 
         return deck;
     }
 
     // -------------------------------------------------------------------------
-    // Default card construction
+    // Basic card construction from fragment pool
 
-    static List<CardData> BuildDefaultAssignments(int count)
+    /// <summary>
+    /// Builds <paramref name="count"/> cards from the BasicFragmentPool.
+    /// Effects and modifiers are each distributed evenly, then randomly paired
+    /// while respecting excluded combinations.
+    /// </summary>
+    List<CardData> BuildBasicCards(int count)
     {
-        int strikeCount = count / 2;
-        int blockCount  = count - strikeCount;
-
-        // Break ties randomly
-        if (count % 2 == 1 && UnityEngine.Random.value < 0.5f)
+        if (basicFragmentPool == null
+            || basicFragmentPool.basicEffects.Count == 0
+            || basicFragmentPool.basicModifiers.Count == 0)
         {
-            strikeCount++;
-            blockCount--;
+            Debug.LogWarning("[HubDeckBuilderState] BasicFragmentPool is missing or empty. Cannot fill deck.");
+            return new List<CardData>();
+        }
+
+        var effects   = DistributeEvenly(basicFragmentPool.basicEffects, count);
+        var modifiers = DistributeEvenly(basicFragmentPool.basicModifiers, count);
+
+        // Pair effects with modifiers, avoiding excluded combinations.
+        // Shuffle modifiers first, then swap to resolve any exclusions.
+        Shuffle(modifiers);
+
+        for (int i = 0; i < count; i++)
+        {
+            if (!basicFragmentPool.IsCombinationExcluded(effects[i], modifiers[i]))
+                continue;
+
+            // Find a swap partner that resolves both positions
+            bool resolved = false;
+            for (int j = i + 1; j < count; j++)
+            {
+                bool swapFixesI = !basicFragmentPool.IsCombinationExcluded(effects[i], modifiers[j]);
+                bool swapFixesJ = !basicFragmentPool.IsCombinationExcluded(effects[j], modifiers[i]);
+                if (swapFixesI && swapFixesJ)
+                {
+                    (modifiers[i], modifiers[j]) = (modifiers[j], modifiers[i]);
+                    resolved = true;
+                    break;
+                }
+            }
+
+            if (!resolved)
+                Debug.LogWarning($"[HubDeckBuilderState] Could not avoid excluded combination: " +
+                    $"{effects[i].fragmentName} + {modifiers[i].fragmentName}. " +
+                    $"Check that exclusions don't make valid pairings impossible.");
         }
 
         var list = new List<CardData>(count);
-        for (int i = 0; i < strikeCount; i++) list.Add(MakeDefaultCard(isStrike: true));
-        for (int i = 0; i < blockCount;  i++) list.Add(MakeDefaultCard(isStrike: false));
+        for (int i = 0; i < count; i++)
+        {
+            var card = ScriptableObject.CreateInstance<CardData>();
+            card.effectFragment   = effects[i];
+            card.modifierFragment = modifiers[i];
+            card.name             = card.CardName;
+            list.Add(card);
+        }
 
-        // Fisher-Yates shuffle so strikes/blocks are spread across slots
+        Shuffle(list);
+        return list;
+    }
+
+    /// <summary>
+    /// Distributes items from <paramref name="pool"/> evenly to fill <paramref name="count"/> slots.
+    /// Each item appears floor(count/poolSize) times, with remainder distributed randomly.
+    /// </summary>
+    static List<T> DistributeEvenly<T>(List<T> pool, int count)
+    {
+        int poolSize = pool.Count;
+        int each     = count / poolSize;
+        int remainder = count % poolSize;
+
+        var result = new List<T>(count);
+        for (int i = 0; i < poolSize; i++)
+            for (int j = 0; j < each; j++)
+                result.Add(pool[i]);
+
+        // Distribute remainder randomly
+        var indices = new List<int>(poolSize);
+        for (int i = 0; i < poolSize; i++) indices.Add(i);
+        Shuffle(indices);
+        for (int i = 0; i < remainder; i++)
+            result.Add(pool[indices[i]]);
+
+        return result;
+    }
+
+    static void Shuffle<T>(List<T> list)
+    {
         for (int i = list.Count - 1; i > 0; i--)
         {
             int j = UnityEngine.Random.Range(0, i + 1);
             (list[i], list[j]) = (list[j], list[i]);
         }
-
-        return list;
-    }
-
-    static CardData MakeDefaultCard(bool isStrike)
-    {
-        var effect = ScriptableObject.CreateInstance<EffectFragmentData>();
-        effect.fragmentName = isStrike ? "Strike" : "Block";
-        effect.baseCost     = 1;
-        effect.minCost      = 1;
-        effect.maxCost      = 1;
-        effect.effectColor  = isStrike ? new Color(0.85f, 0.25f, 0.25f) : new Color(0.25f, 0.55f, 0.85f);
-        effect.effects.Add(new CardEffect
-        {
-            type      = isStrike ? EffectType.Strike : EffectType.Block,
-            baseValue = 3,
-            hits      = 1
-        });
-
-        var modifier = ScriptableObject.CreateInstance<ModifierFragmentData>();
-        // Leave fragmentName empty so CardName is just the effect name ("Strike" / "Block")
-        modifier.fragmentName  = "";
-
-        if (isStrike)
-        {
-            // One tile directly ahead in the aimed direction
-            modifier.placementType = PlacementType.DirectionalFromPlayer;
-            modifier.tiles.Add(new TileData { position = new Vector2Int(0, 1) });
-        }
-        else
-        {
-            // Centred on the player — hits the player's own tile (for self-targeting Block)
-            modifier.placementType = PlacementType.CenteredOnPlayer;
-            modifier.tiles.Add(new TileData { position = Vector2Int.zero });
-        }
-
-        var card = ScriptableObject.CreateInstance<CardData>();
-        card.effectFragment   = effect;
-        card.modifierFragment = modifier;
-        card.name             = card.CardName;
-        return card;
     }
 }
