@@ -258,19 +258,21 @@ public class HubDeckBuilderState : MonoBehaviour
         var effects   = DistributeEvenly(basicFragmentPool.basicEffects, count);
         var modifiers = DistributeEvenly(basicFragmentPool.basicModifiers, count);
 
-        // Pair effects with modifiers, avoiding excluded combinations.
-        // Shuffle modifiers first, then swap to resolve any exclusions.
+        // Shuffle both lists so groupings are random before resolving exclusions
+        Shuffle(effects);
         Shuffle(modifiers);
 
+        // Resolve excluded combinations by swapping modifiers.
+        // Search the entire list (not just forward) for valid swap partners.
         for (int i = 0; i < count; i++)
         {
             if (!basicFragmentPool.IsCombinationExcluded(effects[i], modifiers[i]))
                 continue;
 
-            // Find a swap partner that resolves both positions
             bool resolved = false;
-            for (int j = i + 1; j < count; j++)
+            for (int j = 0; j < count; j++)
             {
+                if (j == i) continue;
                 bool swapFixesI = !basicFragmentPool.IsCombinationExcluded(effects[i], modifiers[j]);
                 bool swapFixesJ = !basicFragmentPool.IsCombinationExcluded(effects[j], modifiers[i]);
                 if (swapFixesI && swapFixesJ)
