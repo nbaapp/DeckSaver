@@ -10,25 +10,28 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 61ae086799ced4223bae9201713b3670, type: 3}
-  m_Name: Warlord
+  m_Name: Infected Wounds
   m_EditorClassIdentifier: Assembly-CSharp::BoonData
-  boonName: Warlord
-  description: Apply 1 Weak to all enemies at the start of your turn.
+  boonName: Infected Wounds
+  description: All Bleed effects additionally inflict 1 Poison
   icon: {fileID: 0}
   shopPrice: 0
   effects:
-  - trigger: 4
+  - trigger: 8
     statType: 0
     statValue: 0
-    target: 1
+    target: 5
     valueSource: 0
     effects:
     - type: 5
       baseValue: 1
-      hits: 1
-      statusType: 5
-    statusCondition: 0
-    specificStatus: 0
+      hits: 0
+      statusType: 1
+    statusCondition: 1
+    specificStatus: 4
     statusSet: 
     requiredCardKeywords: 
-  keywordOverlays: []
+  keywordOverlays:
+  - filterKeywords: 08000000
+    grantKeywords: 07000000
+    stripKeywords: 

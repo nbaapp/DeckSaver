@@ -24,6 +24,8 @@ MonoBehaviour:
   - {fileID: 11400000, guid: 92dd7dc343e664d61869b1eb9f33d670, type: 2}
   - {fileID: 11400000, guid: 31ec9de84ae0b4afb828253e194a8529, type: 2}
   - {fileID: 11400000, guid: d6bb2ef4bb32a4f91b1dfcebea86ae0a, type: 2}
+  - {fileID: 11400000, guid: 8949ae16196f84eed86ef0f6de22a58b, type: 2}
+  - {fileID: 11400000, guid: e30526f429ab34ae7b03f5504f9ac6d6, type: 2}
   effectFragmentPool:
   - {fileID: 11400000, guid: ef01ef010000000000000000ef01ef01, type: 2}
   - {fileID: 11400000, guid: ef0aef0a0000000000000000ef0aef0a, type: 2}
@@ -43,10 +45,11 @@ MonoBehaviour:
   - {fileID: 11400000, guid: de05de050000000000000000de05de05, type: 2}
   - {fileID: 11400000, guid: 7703353fb723c4f9a890b2f10d3def8b, type: 2}
   - {fileID: 11400000, guid: c199c1685f54b45c4aad8a69544fe6e7, type: 2}
-  - {fileID: 11400000, guid: de04de040000000000000000de04de04, type: 2}
+  - {fileID: 11400000, guid: 21faf0278048c484cb3c35b8c2b8eb47, type: 2}
   - {fileID: 11400000, guid: de09de090000000000000000de09de09, type: 2}
   - {fileID: 11400000, guid: de03de030000000000000000de03de03, type: 2}
   - {fileID: 11400000, guid: de08de080000000000000000de08de08, type: 2}
   - {fileID: 11400000, guid: de07de070000000000000000de07de07, type: 2}
-  - {fileID: 11400000, guid: de01de010000000000000000de01de01, type: 2}
+  - {fileID: 11400000, guid: 174456c733d23426e8a463d17ec0dd88, type: 2}
   - {fileID: 11400000, guid: de02de020000000000000000de02de02, type: 2}
+  includeFragmentUpgrade: 0
