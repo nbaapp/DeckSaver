@@ -1,0 +1,100 @@
+DeckSaver Audio System — Setup Checklist
+==========================================
+
+The C# side is fully wired. Two assets MUST be created in the Unity editor
+because they aren't text-serialised in a way that's safe to author by hand:
+
+  1. The AudioMixer asset (with four exposed parameters)
+  2. The AudioManager prefab in Resources/
+
+Once both exist, audio runs automatically in every scene.
+
+
+STEP 1 — Create the AudioMixer
+-------------------------------
+In the Project window:
+  Right-click  Assets/Audio  →  Create  →  Audio Mixer
+  Name it:  MainMixer
+
+Open MainMixer (double-click). In the "Groups" panel on the left you'll see
+a "Master" group. Add three children of Master (right-click Master → Add
+child group):
+  - Music
+  - SFX
+  - UI
+
+For each of the four groups (including Master), expose its volume parameter:
+  • Click the group
+  • In the Inspector, right-click the "Volume" label
+  • Choose "Expose 'Volume (of <group>)' to script"
+
+Then open the "Exposed Parameters" dropdown (top-right of the AudioMixer
+window) and rename them to:
+  - MasterVol
+  - MusicVol
+  - SFXVol
+  - UIVol
+
+
+STEP 2 — Create the AudioManager prefab in Resources
+-----------------------------------------------------
+The AudioManager.cs bootstraps itself by loading
+  Resources/AudioManager
+at runtime. The prefab needs to exist in any folder named "Resources".
+
+In the Hierarchy:
+  • Create empty GameObject named "AudioManager"
+  • Add component:  AudioManager (script)
+
+Configure the inspector:
+  Mixer:  drag MainMixer
+
+  Groups (size = 4) — for each entry, set:
+    [0] Group=Master, MixerGroup=Master,  ExposedVolumeParam=MasterVol
+    [1] Group=Music,  MixerGroup=Music,   ExposedVolumeParam=MusicVol
+    [2] Group=SFX,    MixerGroup=SFX,     ExposedVolumeParam=SFXVol
+    [3] Group=UI,     MixerGroup=UI,      ExposedVolumeParam=UIVol
+
+  Initial Pool Size:  8         (grows on demand)
+  Default Fade Seconds:  1      (used when MusicTransition.Fade has no override)
+
+Drag the configured GameObject into:
+  Assets/Resources/AudioManager.prefab
+…then DELETE the scene instance (the runtime instantiates from Resources).
+
+
+STEP 3 — Wire the BattleAudioBridge
+------------------------------------
+In Battle.unity:
+  • Create empty GameObject "BattleAudio"
+  • Add component:  BattleAudioBridge
+
+The four SoundData slots can be left empty for now — events will simply
+not produce sound until you fill them in. Create SoundData assets via:
+  Right-click  Assets/Audio/SFX  →  Create  →  DeckSaver  →  Audio  →  Sound Data
+
+
+STEP 4 — Per-encounter music
+-----------------------------
+Each EncounterDefinition asset now has Music Track / Music Transition /
+Music Fade Seconds fields. Leave Music Track null for silent encounters.
+
+To compare Stop vs Fade live, set two encounters with the same track but
+different transitions and play them back-to-back.
+
+
+STEP 5 (optional) — Settings UI
+--------------------------------
+When you build a settings or pause menu, drop a VolumeSettingsPanel
+component on the panel and wire four UI Sliders. The component handles
+read/write/persistence automatically.
+
+
+Folder convention
+------------------
+  Assets/Audio/
+    Music/   — music SoundData assets
+    SFX/     — combat / interaction SoundData assets
+    UI/      — UI SoundData assets
+  Assets/Resources/
+    AudioManager.prefab  — boot prefab

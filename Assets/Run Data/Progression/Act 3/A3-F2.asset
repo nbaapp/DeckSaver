@@ -1,0 +1,33 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7b4083b9e2aad4d7fba8b7dd68c4c724, type: 3}
+  m_Name: A3-F2
+  m_EditorClassIdentifier: Assembly-CSharp::FrontConfig
+  frontName: Act3-Front2
+  standardConflictPool:
+  - {fileID: 11400000, guid: 32640425e155a4599a973f50ef32dd63, type: 2}
+  hardConflictPool:
+  - {fileID: 11400000, guid: 5fa6989d1d7824da4bd38338a7c75008, type: 2}
+  bossEncounter: {fileID: 11400000, guid: d2b86dd089e74445eb396d4b6f0e7b2f, type: 2}
+  eventPool: []
+  bossBoonPool:
+  - {fileID: 11400000, guid: bd05ef6358547467d90526dcef89246d, type: 2}
+  - {fileID: 11400000, guid: 2f304f08dfa214f60afb014c981d3fd4, type: 2}
+  - {fileID: 11400000, guid: a9d51e18b70cf4d30b84e4ca814c4d04, type: 2}
+  - {fileID: 11400000, guid: 61e2cffd75d1945fd90666cb0d7eb454, type: 2}
+  - {fileID: 11400000, guid: 96f62a8c3880f495cbfa380fb30ca17c, type: 2}
+  - {fileID: 11400000, guid: 5edd0f1866a9344398059f8dbb5b5761, type: 2}
+  - {fileID: 11400000, guid: 544d0361321ef4b13af700005552cc81, type: 2}
+  - {fileID: 11400000, guid: a9aa42401bcc643f391c53b7337676a2, type: 2}
+  - {fileID: 11400000, guid: 92dd7dc343e664d61869b1eb9f33d670, type: 2}
+  - {fileID: 11400000, guid: 31ec9de84ae0b4afb828253e194a8529, type: 2}
+  - {fileID: 11400000, guid: d6bb2ef4bb32a4f91b1dfcebea86ae0a, type: 2}
