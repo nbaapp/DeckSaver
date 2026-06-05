@@ -4,7 +4,7 @@ using System;
 // baseValue meaning depends on type:
 //   Strike/Block/Heal  — amount per hit (scaled by tile modifiers on player cards; raw on enemies)
 //   Draw/Discard       — number of cards
-//   Knockback          — number of tiles
+//   Push/Pull          — number of tiles to displace
 //   Status             — stack count applied (duration/magnitude per StatusDecayType)
 //   Special            — defined by custom game logic; baseValue is a freeform parameter
 //

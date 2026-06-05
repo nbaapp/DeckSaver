@@ -18,4 +18,7 @@ public class BoonData : ScriptableObject
 
     [Tooltip("Passive effects applied for the remainder of the run.")]
     public List<PassiveEffect> effects = new();
+
+    [Tooltip("Always-on keyword overlays. Cards matching filterKeywords gain grantKeywords and lose stripKeywords.")]
+    public List<KeywordOverlayRule> keywordOverlays = new();
 }

@@ -40,6 +40,13 @@ public class GridInputHandler : MonoBehaviour
     /// <summary>True while a card is selected but the player hasn't yet chosen which unit will use it.</summary>
     public bool IsAwaitingUnit => _awaitingUnit;
 
+    /// <summary>
+    /// Snapshot of <see cref="IsAwaitingUnit"/> captured at the moment OnTileClicked was last raised.
+    /// Use this instead of <see cref="IsAwaitingUnit"/> inside tile-click handlers, since another
+    /// handler (e.g. unit selection) may have already flipped the live state before yours runs.
+    /// </summary>
+    public bool WasAwaitingUnitAtLastClick { get; private set; }
+
     // Abstractions so Update/RefreshHighlight work for both cards and commander active
     private ModifierFragmentData PendingModifier    => _pendingCard?.modifierFragment ?? _pendingCommanderActive?.activeArea;
     private PlacementType        PendingPlacementType =>
@@ -75,7 +82,10 @@ public class GridInputHandler : MonoBehaviour
         }
 
         if (_hoveredTile != null && Mouse.current.leftButton.wasPressedThisFrame)
+        {
+            WasAwaitingUnitAtLastClick = _awaitingUnit; // snapshot before listeners mutate state
             OnTileClicked?.Invoke(_hoveredTile);
+        }
     }
 
     // ── Public API ────────────────────────────────────────────────────────────
@@ -184,20 +194,21 @@ public class GridInputHandler : MonoBehaviour
     {
         if (_cam == null) return null;
         Vector2 screenPos = Mouse.current.position.ReadValue();
-        Vector2 worldPos  = _cam.ScreenToWorldPoint(screenPos);
-        // RaycastAll so entity colliders (enemies) don't block the tile beneath them.
-        foreach (var hit in Physics2D.RaycastAll(worldPos, Vector2.zero))
-        {
-            var tile = hit.collider.GetComponent<GridTile>();
-            if (tile != null) return tile;
-        }
-        return null;
+        Vector3 worldPos  = _cam.ScreenToWorldPoint(screenPos);
+        return GridManager.Instance?.WorldToTile(worldPos);
     }
 
     /// <summary>
     /// Determine the cardinal direction the pattern should face, based on where
     /// the mouse is relative to the player.  Keeps the last direction when the
     /// mouse is very close to the player (avoids jitter).
+    ///
+    /// The four Vector2Int cardinals are grid-space directions, which on an
+    /// isometric grid project to the four screen diagonals — so we have to
+    /// invert the iso transform on the mouse-to-player delta before picking
+    /// the dominant axis. Otherwise "mouse straight down on screen" picks
+    /// grid-down, which on iso renders down-right, and the pattern feels
+    /// disconnected from the cursor.
     /// </summary>
     private Vector2Int ComputeDirection()
     {
@@ -207,13 +218,33 @@ public class GridInputHandler : MonoBehaviour
         Vector2 screenPos   = Mouse.current.position.ReadValue();
         Vector2 mouseWorld  = _cam.ScreenToWorldPoint(screenPos);
         Vector2 playerWorld = GridManager.Instance.GridToWorld(player.GridPosition);
-        Vector2 delta       = mouseWorld - playerWorld;
+        Vector2 worldDelta  = mouseWorld - playerWorld;
 
-        if (delta.sqrMagnitude < 0.01f) return _currentDir; // too close — keep last
+        if (worldDelta.sqrMagnitude < 0.01f) return _currentDir; // too close — keep last
 
-        return Mathf.Abs(delta.x) >= Mathf.Abs(delta.y)
-            ? (delta.x >= 0 ? Vector2Int.right : Vector2Int.left)
-            : (delta.y >= 0 ? Vector2Int.up    : Vector2Int.down);
+        Vector2 gridDelta = WorldDeltaToGrid(worldDelta);
+
+        return Mathf.Abs(gridDelta.x) >= Mathf.Abs(gridDelta.y)
+            ? (gridDelta.x >= 0 ? Vector2Int.right : Vector2Int.left)
+            : (gridDelta.y >= 0 ? Vector2Int.up    : Vector2Int.down);
+    }
+
+    /// <summary>
+    /// Inverse of the iso world transform on a delta vector. Given world cell
+    /// size (cw, ch), the forward iso map is world = ((gx-gy)*cw/2, (gx+gy)*ch/2);
+    /// solving for grid yields gx = wx/cw + wy/ch, gy = -wx/cw + wy/ch.
+    /// </summary>
+    private static Vector2 WorldDeltaToGrid(Vector2 worldDelta)
+    {
+        var grid = GridManager.Instance?.Grid;
+        if (grid == null) return worldDelta;
+
+        Vector3 cs = grid.cellSize;
+        if (cs.x <= 0f || cs.y <= 0f) return worldDelta;
+
+        return new Vector2(
+             worldDelta.x / cs.x + worldDelta.y / cs.y,
+            -worldDelta.x / cs.x + worldDelta.y / cs.y);
     }
 
     private void RefreshHighlight()
@@ -297,7 +328,6 @@ public class GridInputHandler : MonoBehaviour
 
     private static Vector2Int PlayerPos()
     {
-        return PlayerEntity.Instance?.GridPosition
-            ?? new Vector2Int(GridManager.Instance.width / 2, GridManager.Instance.height / 2);
+        return PlayerEntity.Instance?.GridPosition ?? Vector2Int.zero;
     }
 }

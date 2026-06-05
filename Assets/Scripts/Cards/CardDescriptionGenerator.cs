@@ -1,3 +1,4 @@
+using System.Linq;
 using System.Text;
 
 /// <summary>
@@ -38,6 +39,15 @@ public static class CardDescriptionGenerator
         }
         sb.AppendLine();
         sb.Append(PlacementFull(card.modifierFragment.placementType, card.modifierFragment.tiles.Count));
+
+        var keywords = card.GetKeywords();
+        if (keywords.Count > 0)
+        {
+            sb.AppendLine();
+            sb.AppendLine();
+            sb.Append("<i>Keywords:</i> ");
+            sb.Append(string.Join(", ", keywords.OrderBy(k => k.ToString())));
+        }
         return sb.ToString().TrimEnd();
     }
 
@@ -54,7 +64,8 @@ public static class CardDescriptionGenerator
             EffectType.Draw      => $"Draw {e.baseValue}",
             EffectType.Discard   => $"Discard {e.baseValue}",
             EffectType.Status    => $"Apply {e.baseValue} {e.statusType}",
-            EffectType.Knockback => $"Knockback {e.baseValue}",
+            EffectType.Push      => $"Push {e.baseValue}",
+            EffectType.Pull      => $"Pull {e.baseValue}",
             EffectType.Special   => "Special",
             _                    => string.Empty
         };
@@ -71,7 +82,8 @@ public static class CardDescriptionGenerator
             EffectType.Draw      => $"Draw <b>{e.baseValue}</b> card{S(e.baseValue)}.",
             EffectType.Discard   => $"Discard <b>{e.baseValue}</b> card{S(e.baseValue)}.",
             EffectType.Status    => $"Apply <b>{e.baseValue}</b> stack{S(e.baseValue)} of <b>{e.statusType}</b>.",
-            EffectType.Knockback => $"Knock back enemies <b>{e.baseValue}</b> tile{S(e.baseValue)}.",
+            EffectType.Push      => $"Push enemies <b>{e.baseValue}</b> tile{S(e.baseValue)} away.",
+            EffectType.Pull      => $"Pull enemies <b>{e.baseValue}</b> tile{S(e.baseValue)} toward you.",
             EffectType.Special   => "Triggers a special effect.",
             _                    => string.Empty
         };

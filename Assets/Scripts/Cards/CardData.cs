@@ -39,4 +39,42 @@ public class CardData : ScriptableObject
     public PlacementType    PlacementType     => modifierFragment != null ? modifierFragment.placementType : default;
     public List<TileData>   Tiles             => modifierFragment?.tiles;
     public List<TileModifier> GlobalModifiers => modifierFragment?.globalModifiers;
+
+    // --- Keywords ---
+    // Effective keyword set =
+    //   manual (effect + modifier) ∪ auto-derived (from effect's CardEffects),
+    //   then mutated by any active KeywordOverlay rules (grants/strips from boons/commander).
+    public HashSet<Keyword> GetKeywords()
+    {
+        var set = new HashSet<Keyword>();
+        if (effectFragment != null)
+        {
+            foreach (var k in effectFragment.keywords) set.Add(k);
+            foreach (var k in KeywordHelpers.DeriveFromEffects(effectFragment.effects)) set.Add(k);
+        }
+        if (modifierFragment != null)
+        {
+            foreach (var k in modifierFragment.keywords) set.Add(k);
+        }
+        KeywordOverlay.Apply(set);
+        return set;
+    }
+
+    public bool HasKeyword(Keyword k) => GetKeywords().Contains(k);
+
+    public bool HasAnyKeyword(params Keyword[] ks)
+    {
+        if (ks == null || ks.Length == 0) return false;
+        var set = GetKeywords();
+        foreach (var k in ks) if (set.Contains(k)) return true;
+        return false;
+    }
+
+    public bool HasAllKeywords(params Keyword[] ks)
+    {
+        if (ks == null || ks.Length == 0) return true;
+        var set = GetKeywords();
+        foreach (var k in ks) if (!set.Contains(k)) return false;
+        return true;
+    }
 }

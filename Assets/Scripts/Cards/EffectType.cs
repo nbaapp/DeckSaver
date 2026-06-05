@@ -6,6 +6,7 @@ public enum EffectType
     Draw,
     Discard,
     Status,
-    Knockback,
-    Special
+    Push,    // Renamed from Knockback. Pushes the target away from the formation anchor.
+    Special,
+    Pull     // Pulls the target toward the formation anchor.
 }

@@ -41,6 +41,20 @@ public class PassiveEffect
 
     [UnityEngine.Tooltip("Used when statusCondition == AnyOf")]
     public List<StatusType> statusSet = new();
+
+    // ── OnCardPlay keyword filter ─────────────────────────────────────────────
+    [UnityEngine.Tooltip("Used by OnCardPlay: passive only fires when the played card has ALL of these keywords. Empty = no filter. Ignored for other triggers.")]
+    public List<Keyword> requiredCardKeywords = new();
+
+    public bool PassesKeywordFilter(CardData card)
+    {
+        if (trigger != PassiveTrigger.OnCardPlay) return true; // filter only applies here
+        if (requiredCardKeywords == null || requiredCardKeywords.Count == 0) return true;
+        if (card == null) return false;
+        foreach (var k in requiredCardKeywords)
+            if (!card.HasKeyword(k)) return false;
+        return true;
+    }
 }
 
 public enum StatusConditionType

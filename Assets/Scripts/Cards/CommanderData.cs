@@ -17,4 +17,7 @@ public class CommanderData : ScriptableObject
     [Header("Passive Ability")]
     [TextArea] public string passiveFlavorText;
     public List<PassiveEffect> passiveEffects = new();
+
+    [Tooltip("Always-on keyword overlays granted by this Commander. Cards matching filterKeywords gain grantKeywords and lose stripKeywords.")]
+    public List<KeywordOverlayRule> keywordOverlays = new();
 }

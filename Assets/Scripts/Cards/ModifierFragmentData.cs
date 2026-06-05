@@ -19,6 +19,14 @@ public class ModifierFragmentData : ScriptableObject
     // Applied to the final effect value after all per-tile modifiers.
     public List<TileModifier> globalModifiers = new();
 
+    [Header("Keywords")]
+    [Tooltip("Keywords contributed by this Formation (e.g. Projectile, Blast, Mobility, Combo). Combined with the paired Order's keywords on the final card.")]
+    public List<Keyword> keywords = new();
+
+    [Header("Conditional Effects (formation-wide)")]
+    [Tooltip("Effects injected across all affected tiles when the paired Order's keywords match. Use this for Formations like Ignition (Burn → splash) or Crushing (ForcedMovement → collision damage). For tile-scoped effects (Volatile, Echoing, etc.), put the ConditionalEffect on the individual TileData instead.")]
+    public List<ConditionalEffect> globalConditionalEffects = new();
+
     // ── Mana cost (designer-facing; hidden from player) ───────────────────────
     [Header("Mana Cost (hidden from player)")]
     [Tooltip("Cost adjustment contributed by this modifier. Negative values make the composite card cheaper.")]

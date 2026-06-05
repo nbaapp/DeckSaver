@@ -28,6 +28,10 @@ public class EffectFragmentData : ScriptableObject
 
     public List<CardEffect> effects = new();
 
+    [Header("Keywords")]
+    [Tooltip("Manually-applied keywords. Auto-derived keywords (Strike, Heal, Shield, ForcedMovement, Debuff, Buff, Burn, Poison, Bleed) are added at runtime based on effects — do not duplicate them here.")]
+    public List<Keyword> keywords = new();
+
     // ── Shop ──────────────────────────────────────────────────────────────────
     [Header("Shop")]
     [Tooltip("Gold cost when this fragment appears in a shop. 0 = not for sale.")]

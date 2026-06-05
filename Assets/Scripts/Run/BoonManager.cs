@@ -52,6 +52,7 @@ public class BoonManager : MonoBehaviour
         BattleEvents.OnPlayerStatusReceived -= HandleStatusReceived;
         BattleEvents.OnCardDrawn            -= HandleCardDrawn;
         BattleEvents.OnCardDiscarded        -= HandleCardDiscarded;
+        KeywordOverlay.ClearOwner(this);
     }
 
     // ── Battle start ──────────────────────────────────────────────────────────
@@ -65,6 +66,13 @@ public class BoonManager : MonoBehaviour
             foreach (var passive in boon.effects)
                 if (passive.trigger == PassiveTrigger.StatModifier)
                     PlayerParty.Instance?.ApplyStatBonus(passive.statType, passive.statValue);
+
+        // Aggregate keyword overlay rules from all active boons and register them.
+        var rules = new List<KeywordOverlayRule>();
+        foreach (var boon in _boons)
+            if (boon != null && boon.keywordOverlays != null)
+                rules.AddRange(boon.keywordOverlays);
+        KeywordOverlay.SetOwnerRules(this, rules);
 
         FirePassives(PassiveTrigger.OnBattleStart, null, 0);
     }
@@ -85,7 +93,7 @@ public class BoonManager : MonoBehaviour
     // ── Event handlers ────────────────────────────────────────────────────────
 
     private void HandleTurnStart()                            => FirePassives(PassiveTrigger.OnTurnStart,  null, 0);
-    private void HandleCardPlayed(CardData _)                 => FirePassives(PassiveTrigger.OnCardPlay,   null, 0);
+    private void HandleCardPlayed(CardData card)              => FirePassives(PassiveTrigger.OnCardPlay,   null, 0, card);
     private void HandleBlockGain(int amount)                  => FirePassives(PassiveTrigger.OnBlockGain,  null, amount);
     private void HandlePlayerDamaged(int net)                 => FirePassives(PassiveTrigger.OnDamage,     null, net);
     private void HandleCardDrawn(CardData _)                  => FirePassives(PassiveTrigger.OnDraw,       null, 0);
@@ -125,7 +133,8 @@ public class BoonManager : MonoBehaviour
 
     // ── Passive resolution ────────────────────────────────────────────────────
 
-    private void FirePassives(PassiveTrigger trigger, Entity contextEntity, int contextAmount)
+    private void FirePassives(PassiveTrigger trigger, Entity contextEntity, int contextAmount,
+                              CardData contextCard = null)
     {
         if (_firingPassive) return;
         _firingPassive = true;
@@ -135,6 +144,7 @@ public class BoonManager : MonoBehaviour
                 foreach (var passive in boon.effects)
                 {
                     if (passive.trigger != trigger) continue;
+                    if (!passive.PassesKeywordFilter(contextCard)) continue;
                     ResolvePassive(passive, contextEntity, contextAmount);
                 }
         }
@@ -252,6 +262,14 @@ public class BoonManager : MonoBehaviour
                 for (int i = 0; i < count; i++)
                     target.ApplyStatus(statusType, value);
                 break;
+            case EffectType.Push:
+            case EffectType.Pull:
+            {
+                Vector2Int anchorPos = attacker?.GridPosition ?? Vector2Int.zero;
+                for (int i = 0; i < count; i++)
+                    KnockbackResolver.Resolve(target, anchorPos, value, isPull: effect.type == EffectType.Pull);
+                break;
+            }
             case EffectType.Draw:
                 for (int i = 0; i < value; i++)
                     BattleDeck.Instance?.DrawCard();

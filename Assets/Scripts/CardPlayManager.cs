@@ -40,7 +40,9 @@ public class CardPlayManager : MonoBehaviour
         if (selected == null) return;
 
         // Still waiting for the player to pick which unit uses the card — don't resolve yet.
-        if (GridInputHandler.Instance?.IsAwaitingUnit == true) return;
+        // Snapshot is read instead of IsAwaitingUnit since PlayerMovementHandler may have already
+        // consumed this click (selecting the unit) before this handler runs.
+        if (GridInputHandler.Instance?.WasAwaitingUnitAtLastClick == true) return;
 
         // A selected unit is required before a card can resolve.
         if (PlayerParty.Instance?.SelectedUnit == null) return;
@@ -58,9 +60,36 @@ public class CardPlayManager : MonoBehaviour
 
         if (!PlayerParty.Instance.TrySpendMana(card.ManaCost)) return;
 
-        var globalMods = card.modifierFragment.globalModifiers;
+        // Anchor used by knockback direction: player position for Centered/Directional, click tile for Free.
+        Vector2Int anchorPos = card.PlacementType == PlacementType.FreelyPlaceable
+            ? tile.GridPosition
+            : PlayerEntity.Instance?.GridPosition ?? Vector2Int.zero;
+
+        var globalMods    = card.modifierFragment.globalModifiers;
+        var cardKeywords  = card.GetKeywords();
         foreach (var effect in card.Effects ?? new List<CardEffect>())
-            ApplyEffect(effect, card, affected, globalMods);
+            ApplyEffect(effect, card, affected, globalMods, cardKeywords, anchorPos);
+
+        // Tile-scoped conditional effects (Volatile, Echoing, etc.) — bound to the tile they're authored on.
+        foreach (var (affectedTile, data) in affected)
+        {
+            if (data?.tileEffects == null) continue;
+            foreach (var cond in data.tileEffects)
+            {
+                if (!cond.Matches(cardKeywords)) continue;
+                var singleTile = new List<(GridTile, TileData)> { (affectedTile, data) };
+                foreach (var effect in cond.effects)
+                    ApplyEffect(effect, card, singleTile, globalMods, cardKeywords, anchorPos);
+            }
+        }
+
+        // Formation-wide conditional effects (Ignition splash, Crushing collision, etc.).
+        foreach (var cond in card.modifierFragment.globalConditionalEffects ?? new List<ConditionalEffect>())
+        {
+            if (!cond.Matches(cardKeywords)) continue;
+            foreach (var effect in cond.effects)
+                ApplyEffect(effect, card, affected, globalMods, cardKeywords, anchorPos);
+        }
 
         if (card.modifierFragment.movesPlayer)
             MovePlayer(card.modifierFragment.moveDistance);
@@ -93,7 +122,9 @@ public class CardPlayManager : MonoBehaviour
         CardEffect effect,
         CardData card,
         List<(GridTile tile, TileData data)> affected,
-        List<TileModifier> globalMods)
+        List<TileModifier> globalMods,
+        HashSet<Keyword> cardKeywords,
+        Vector2Int anchorPos)
     {
         switch (effect.type)
         {
@@ -104,7 +135,7 @@ public class CardPlayManager : MonoBehaviour
                 {
                     var target = EntityManager.Instance.GetEntityAt(tile.GridPosition);
                     if (target == null) continue;
-                    int dmg   = ComputeValue(effect.baseValue, globalMods, data.modifiers);
+                    int dmg   = ComputeValue(effect.baseValue, globalMods, data.modifiers, cardKeywords);
                     int count = Mathf.Max(1, effect.hits);
                     for (int h = 0; h < count; h++)
                         StatusResolver.ApplyStrike(strikeAttacker, target, atkPos, dmg, out _);
@@ -116,7 +147,7 @@ public class CardPlayManager : MonoBehaviour
                 {
                     var entity = EntityManager.Instance.GetEntityAt(tile.GridPosition);
                     if (entity == null) continue;
-                    int block = ComputeValue(effect.baseValue, globalMods, data.modifiers);
+                    int block = ComputeValue(effect.baseValue, globalMods, data.modifiers, cardKeywords);
                     int count = Mathf.Max(1, effect.hits);
                     for (int h = 0; h < count; h++)
                         entity.GainBlock(block);
@@ -128,7 +159,7 @@ public class CardPlayManager : MonoBehaviour
                 {
                     var entity = EntityManager.Instance.GetEntityAt(tile.GridPosition);
                     if (entity == null) continue;
-                    int heal  = ComputeValue(effect.baseValue, globalMods, data.modifiers);
+                    int heal  = ComputeValue(effect.baseValue, globalMods, data.modifiers, cardKeywords);
                     int count = Mathf.Max(1, effect.hits);
                     for (int h = 0; h < count; h++)
                         entity.Heal(heal);
@@ -140,10 +171,23 @@ public class CardPlayManager : MonoBehaviour
                 {
                     var entity = EntityManager.Instance.GetEntityAt(tile.GridPosition);
                     if (entity == null) continue;
-                    int stacks = ComputeValue(effect.baseValue, globalMods, data.modifiers);
+                    int stacks = ComputeValue(effect.baseValue, globalMods, data.modifiers, cardKeywords);
                     int count  = Mathf.Max(1, effect.hits);
                     for (int h = 0; h < count; h++)
                         entity.ApplyStatus(effect.statusType, stacks);
+                }
+                break;
+
+            case EffectType.Push:
+            case EffectType.Pull:
+                foreach (var (tile, data) in affected)
+                {
+                    var target = EntityManager.Instance.GetEntityAt(tile.GridPosition);
+                    if (target == null) continue;
+                    int distance = ComputeValue(effect.baseValue, globalMods, data.modifiers, cardKeywords);
+                    int count    = Mathf.Max(1, effect.hits);
+                    for (int h = 0; h < count; h++)
+                        KnockbackResolver.Resolve(target, anchorPos, distance, isPull: effect.type == EffectType.Pull);
                 }
                 break;
 
@@ -163,20 +207,23 @@ public class CardPlayManager : MonoBehaviour
         }
     }
 
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Apply global then per-tile modifiers to baseValue.
+    /// Apply global then per-tile modifiers to baseValue. Modifiers gated by required keywords
+    /// are skipped when the card's keyword set doesn't satisfy them.
     /// Multiply scales the running value; FlatAdd adds to it.
     /// </summary>
     private static int ComputeValue(
         int baseValue,
         List<TileModifier> globalMods,
-        List<TileModifier> tileMods)
+        List<TileModifier> tileMods,
+        HashSet<Keyword> cardKeywords)
     {
         float v = baseValue;
-        foreach (var m in globalMods) Apply(ref v, m);
-        foreach (var m in tileMods)   Apply(ref v, m);
+        if (globalMods != null) foreach (var m in globalMods) if (m.AppliesTo(cardKeywords)) Apply(ref v, m);
+        if (tileMods   != null) foreach (var m in tileMods)   if (m.AppliesTo(cardKeywords)) Apply(ref v, m);
         return Mathf.RoundToInt(v);
     }
 

@@ -120,7 +120,7 @@ public static class StatusResolver
         // OffBalance: knock target away from attacker (value = knockback tiles)
         int offBalance = target.GetStatusValue(StatusType.OffBalance);
         if (offBalance > 0)
-            KnockbackResolver.Apply(target, attackerPos, offBalance);
+            KnockbackResolver.Resolve(target, attackerPos, offBalance);
 
         // Targeted: consume one charge regardless of damage dealt
         if (target.HasStatus(StatusType.Targeted))

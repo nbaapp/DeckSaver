@@ -59,6 +59,7 @@ public class CommanderController : MonoBehaviour
         BattleEvents.OnCardDrawn            -= HandleCardDrawn;
         BattleEvents.OnCardDiscarded        -= HandleCardDiscarded;
         GridInputHandler.OnTileClicked      -= HandleTileClickedForActive;
+        KeywordOverlay.ClearOwner(this);
     }
 
     // ── Battle start ──────────────────────────────────────────────────────────
@@ -70,6 +71,7 @@ public class CommanderController : MonoBehaviour
 
         ActiveUsesRemaining = _commander.activesPerBattle;
         ApplyStatModifiers();
+        KeywordOverlay.SetOwnerRules(this, _commander.keywordOverlays);
         FirePassives(PassiveTrigger.OnBattleStart, null, 0);
         OnActiveChanged?.Invoke();
     }
@@ -121,8 +123,9 @@ public class CommanderController : MonoBehaviour
 
         if (_commander.activeArea == null)
         {
-            // No area required — fire immediately on all enemies
-            ExecuteActive(null);
+            // No area required — fire immediately on all enemies, anchored on the player.
+            Vector2Int playerAnchor = PlayerEntity.Instance?.GridPosition ?? Vector2Int.zero;
+            ExecuteActive(null, playerAnchor);
         }
         else
         {
@@ -147,10 +150,14 @@ public class CommanderController : MonoBehaviour
         _awaitingActiveTarget = false;
         GridInputHandler.Instance?.ClearPendingCommanderActive();
 
-        ExecuteActive(affected);
+        Vector2Int anchorPos =
+            _commander?.activeArea != null && _commander.activeArea.placementType == PlacementType.FreelyPlaceable
+                ? tile.GridPosition
+                : PlayerEntity.Instance?.GridPosition ?? Vector2Int.zero;
+        ExecuteActive(affected, anchorPos);
     }
 
-    private void ExecuteActive(List<(GridTile tile, TileData data)> affected)
+    private void ExecuteActive(List<(GridTile tile, TileData data)> affected, Vector2Int anchorPos)
     {
         if (_commander == null) return;
         ActiveUsesRemaining--;
@@ -163,30 +170,66 @@ public class CommanderController : MonoBehaviour
             foreach (var effect in _commander.activeEffects)
                 foreach (var enemy in enemies)
                     if (enemy != null)
-                        ApplyEffectToEntity(effect, enemy, -1);
+                        ApplyEffectToEntity(effect, enemy, -1, StatusType.None, anchorPos);
         }
         else
         {
             // Fire on targeted tiles, applying tile modifiers
             var globalMods = _commander.activeArea?.globalModifiers ?? new List<TileModifier>();
+            // Commander actives aren't cards, but per-tile keyword gating still applies based on
+            // keywords derived from activeEffects + the active area's manual keywords.
+            var activeKeywords = new HashSet<Keyword>();
+            foreach (var k in KeywordHelpers.DeriveFromEffects(_commander.activeEffects)) activeKeywords.Add(k);
+            if (_commander.activeArea != null)
+                foreach (var k in _commander.activeArea.keywords) activeKeywords.Add(k);
+
             foreach (var effect in _commander.activeEffects)
                 foreach (var (tile, data) in affected)
+                    ResolveActiveEffect(effect, tile, data, globalMods, activeKeywords, anchorPos);
+
+            // Tile-scoped conditional effects (Volatile, Echoing, etc.) bound to specific tiles.
+            foreach (var (tile, data) in affected)
+            {
+                if (data?.tileEffects == null) continue;
+                foreach (var cond in data.tileEffects)
                 {
-                    var entity = EntityManager.Instance.GetEntityAt(tile.GridPosition);
-                    if (entity == null) continue;
-                    // Status stacks are not scaled by tile modifiers — use baseValue directly.
-                    int value = effect.type == EffectType.Status
-                        ? effect.baseValue
-                        : ComputeValue(effect.baseValue, globalMods, data.modifiers);
-                    ApplyEffectToEntity(effect, entity, value);
+                    if (!cond.Matches(activeKeywords)) continue;
+                    foreach (var effect in cond.effects)
+                        ResolveActiveEffect(effect, tile, data, globalMods, activeKeywords, anchorPos);
                 }
+            }
+
+            // Formation-wide conditional effects from the active area (Ignition splash, etc.).
+            if (_commander.activeArea != null)
+            {
+                foreach (var cond in _commander.activeArea.globalConditionalEffects ?? new List<ConditionalEffect>())
+                {
+                    if (!cond.Matches(activeKeywords)) continue;
+                    foreach (var effect in cond.effects)
+                        foreach (var (tile, data) in affected)
+                            ResolveActiveEffect(effect, tile, data, globalMods, activeKeywords, anchorPos);
+                }
+            }
         }
+    }
+
+    private static void ResolveActiveEffect(CardEffect effect, GridTile tile, TileData data,
+                                            List<TileModifier> globalMods, HashSet<Keyword> activeKeywords,
+                                            Vector2Int anchorPos)
+    {
+        var entity = EntityManager.Instance.GetEntityAt(tile.GridPosition);
+        if (entity == null) return;
+        // Status stacks are not scaled by tile modifiers — use baseValue directly.
+        int value = effect.type == EffectType.Status
+            ? effect.baseValue
+            : ComputeValue(effect.baseValue, globalMods, data.modifiers, activeKeywords);
+        ApplyEffectToEntity(effect, entity, value, StatusType.None, anchorPos);
     }
 
     // ── Passive event handlers ────────────────────────────────────────────────
 
     private void HandleTurnStart()                             => FirePassives(PassiveTrigger.OnTurnStart,  null,   0);
-    private void HandleCardPlayed(CardData _)                  => FirePassives(PassiveTrigger.OnCardPlay,   null,   0);
+    private void HandleCardPlayed(CardData card)               => FirePassives(PassiveTrigger.OnCardPlay,   null,   0, card);
     private void HandleBlockGain(int amount)                   => FirePassives(PassiveTrigger.OnBlockGain,  null,   amount);
     private void HandlePlayerDamaged(int net)                  => FirePassives(PassiveTrigger.OnDamage,     null,   net);
     private void HandleCardDrawn(CardData _)                   => FirePassives(PassiveTrigger.OnDraw,       null,   0);
@@ -225,7 +268,8 @@ public class CommanderController : MonoBehaviour
 
     // ── Passive resolution ────────────────────────────────────────────────────
 
-    private void FirePassives(PassiveTrigger trigger, Entity contextEntity, int contextAmount)
+    private void FirePassives(PassiveTrigger trigger, Entity contextEntity, int contextAmount,
+                              CardData contextCard = null)
     {
         if (_commander == null || _firingPassive) return;
         _firingPassive = true;
@@ -234,6 +278,7 @@ public class CommanderController : MonoBehaviour
             foreach (var passive in _commander.passiveEffects)
             {
                 if (passive.trigger != trigger) continue;
+                if (!passive.PassesKeywordFilter(contextCard)) continue;
                 ResolvePassive(passive, contextEntity, contextAmount);
             }
         }
@@ -335,7 +380,8 @@ public class CommanderController : MonoBehaviour
     /// Pass statusTypeOverride != None to replace the effect's statusType (used by TriggerStatus).
     /// </summary>
     private static void ApplyEffectToEntity(CardEffect effect, Entity target, int valueOverride,
-                                            StatusType statusTypeOverride = StatusType.None)
+                                            StatusType statusTypeOverride = StatusType.None,
+                                            Vector2Int? anchor = null)
     {
         if (target == null) return;
         int value      = valueOverride >= 0 ? valueOverride : effect.baseValue;
@@ -366,6 +412,15 @@ public class CommanderController : MonoBehaviour
                     target.ApplyStatus(statusType, value);
                 break;
 
+            case EffectType.Push:
+            case EffectType.Pull:
+            {
+                Vector2Int anchorPos = anchor ?? attacker?.GridPosition ?? Vector2Int.zero;
+                for (int i = 0; i < count; i++)
+                    KnockbackResolver.Resolve(target, anchorPos, value, isPull: effect.type == EffectType.Pull);
+                break;
+            }
+
             case EffectType.Draw:
                 for (int i = 0; i < value; i++)
                     BattleDeck.Instance?.DrawCard();
@@ -387,11 +442,12 @@ public class CommanderController : MonoBehaviour
 
     // ── Value computation (mirrors CardPlayManager) ───────────────────────────
 
-    private static int ComputeValue(int baseValue, List<TileModifier> globalMods, List<TileModifier> tileMods)
+    private static int ComputeValue(int baseValue, List<TileModifier> globalMods, List<TileModifier> tileMods,
+                                    HashSet<Keyword> keywords)
     {
         float v = baseValue;
-        foreach (var m in globalMods) ApplyMod(ref v, m);
-        foreach (var m in tileMods)   ApplyMod(ref v, m);
+        if (globalMods != null) foreach (var m in globalMods) if (m.AppliesTo(keywords)) ApplyMod(ref v, m);
+        if (tileMods   != null) foreach (var m in tileMods)   if (m.AppliesTo(keywords)) ApplyMod(ref v, m);
         return Mathf.RoundToInt(v);
     }
 

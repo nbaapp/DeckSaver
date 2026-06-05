@@ -1,46 +1,49 @@
 using UnityEngine;
 
 /// <summary>
-/// Handles knockback movement and collision damage.
+/// Resolves Push and Pull movement (cards, statuses, commander actives — anything that displaces a unit).
 ///
-/// Direction is always cardinal (N/S/E/W), directly away from the attacker.
-/// Rooted status on the target reduces the knockback distance.
-/// If the target hits a wall or another entity, both take damage equal to
-/// the remaining knockback distance (tiles that couldn't be travelled).
+/// Direction snaps to the dominant cardinal axis of (target - anchor); ties prefer horizontal. Push moves
+/// away from the anchor, Pull reverses that. Rooted absorbs knockback like Block absorbs damage: each
+/// stack soaks one tile of displacement and is consumed in the process. Movement halts at the first
+/// blocked step (grid edge or another entity); both colliders take damage equal to the remaining
+/// distance (wall collisions damage only the target).
 /// </summary>
 public static class KnockbackResolver
 {
     /// <summary>
-    /// Moves <paramref name="target"/> away from <paramref name="attackerPos"/>
-    /// by up to <paramref name="distance"/> tiles.
+    /// Displace <paramref name="target"/> up to <paramref name="distance"/> tiles from <paramref name="anchor"/>.
+    /// Push by default; pass isPull=true to invert direction.
     /// </summary>
-    public static void Apply(Entity target, Vector2Int attackerPos, int distance)
+    public static void Resolve(Entity target, Vector2Int anchor, int distance, bool isPull = false)
     {
+        if (target == null || distance <= 0) return;
+
+        // Rooted soaks displacement and decays by the amount absorbed.
+        int rooted   = target.GetStatusValue(StatusType.Rooted);
+        int absorbed = Mathf.Min(rooted, distance);
+        for (int i = 0; i < absorbed; i++) target.DecrementStatus(StatusType.Rooted);
+        distance -= absorbed;
         if (distance <= 0) return;
 
-        // Rooted reduces knockback
-        distance = Mathf.Max(0, distance - target.GetStatusValue(StatusType.Rooted));
-        if (distance <= 0) return;
-
-        Vector2Int dir = GetDirection(attackerPos, target.GridPosition);
-        if (dir == Vector2Int.zero) return; // same tile — no meaningful direction
+        Vector2Int dir = GetDirection(anchor, target.GridPosition);
+        if (dir == Vector2Int.zero) return;
+        if (isPull) dir = -dir;
 
         for (int i = 0; i < distance; i++)
         {
-            Vector2Int next  = target.GridPosition + dir;
-            int        remaining = distance - i; // tiles still to travel including this one
+            Vector2Int next      = target.GridPosition + dir;
+            int        remaining = distance - i;
 
             if (!GridManager.Instance.IsInBounds(next))
             {
-                // Hit the edge — impact damage
-                target.TakeDamage(remaining);
+                target.TakeDamage(remaining); // wall collision — only target
                 return;
             }
 
-            Entity blocker = EntityManager.Instance.GetEntityAt(next);
+            var blocker = EntityManager.Instance.GetEntityAt(next);
             if (blocker != null)
             {
-                // Hit another entity — split impact damage
                 target.TakeDamage(remaining);
                 blocker.TakeDamage(remaining);
                 return;
@@ -51,22 +54,23 @@ public static class KnockbackResolver
     }
 
     /// <summary>
-    /// Cardinal direction from <paramref name="attackerPos"/> toward (and past)
-    /// <paramref name="targetPos"/> — i.e., the direction the target flies.
-    /// Prefers the axis with the greater distance; ties go horizontal.
+    /// Direction from <paramref name="anchor"/> toward <paramref name="targetPos"/> — i.e., the direction
+    /// the target flies when pushed. When the target is exactly diagonal from the anchor (|dx| == |dy|,
+    /// both nonzero), pushes along the diagonal; otherwise snaps to the dominant cardinal axis.
     /// </summary>
-    private static Vector2Int GetDirection(Vector2Int attackerPos, Vector2Int targetPos)
+    private static Vector2Int GetDirection(Vector2Int anchor, Vector2Int targetPos)
     {
-        int dx = targetPos.x - attackerPos.x;
-        int dy = targetPos.y - attackerPos.y;
+        int dx = targetPos.x - anchor.x;
+        int dy = targetPos.y - anchor.y;
 
         if (dx == 0 && dy == 0) return Vector2Int.zero;
 
-        if (Mathf.Abs(dx) >= Mathf.Abs(dy) && dx != 0)
-            return new Vector2Int((int)Mathf.Sign(dx), 0);
-        if (dy != 0)
-            return new Vector2Int(0, (int)Mathf.Sign(dy));
+        // Exact diagonal — push along it. Each diagonal step still counts as 1 tile of knockback.
+        if (dx != 0 && dy != 0 && Mathf.Abs(dx) == Mathf.Abs(dy))
+            return new Vector2Int((int)Mathf.Sign(dx), (int)Mathf.Sign(dy));
 
-        return Vector2Int.zero;
+        if (Mathf.Abs(dx) > Mathf.Abs(dy))
+            return new Vector2Int((int)Mathf.Sign(dx), 0);
+        return new Vector2Int(0, (int)Mathf.Sign(dy));
     }
 }
