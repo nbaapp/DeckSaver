@@ -136,57 +136,35 @@ public static class TestDataBuilder
             return;
         }
 
-        // 1. Patrol — two grunts spread across the middle
+        // 1. Patrol — two grunts
         var patrol = Fresh<EncounterDefinition>($"{EncounterRoot}/Patrol.asset");
         patrol.encounterName = "Patrol";
         patrol.type          = EncounterType.Battle;
-        patrol.enemySpawns   = new List<EnemySpawnEntry>
-        {
-            Spawn(grunt, 1, 3),
-            Spawn(grunt, 3, 3),
-        };
+        patrol.enemyRoster   = new List<EnemyData> { grunt, grunt };
 
-        // 2. Ambush — grunt up close, archer hanging back
+        // 2. Ambush — grunt and archer
         var ambush = Fresh<EncounterDefinition>($"{EncounterRoot}/Ambush.asset");
         ambush.encounterName = "Ambush";
         ambush.type          = EncounterType.Battle;
-        ambush.enemySpawns   = new List<EnemySpawnEntry>
-        {
-            Spawn(grunt,  2, 2),
-            Spawn(archer, 2, 4),
-        };
+        ambush.enemyRoster   = new List<EnemyData> { grunt, archer };
 
-        // 3. Overwhelming — three grunts in a line
+        // 3. Overwhelming — three grunts
         var overwhelming = Fresh<EncounterDefinition>($"{EncounterRoot}/Overwhelming.asset");
         overwhelming.encounterName = "Overwhelming";
         overwhelming.type          = EncounterType.Battle;
-        overwhelming.enemySpawns   = new List<EnemySpawnEntry>
-        {
-            Spawn(grunt, 0, 3),
-            Spawn(grunt, 2, 3),
-            Spawn(grunt, 4, 3),
-        };
+        overwhelming.enemyRoster   = new List<EnemyData> { grunt, grunt, grunt };
 
-        // 4. The Bodyguard — brute up front, hexer cursing from behind
+        // 4. The Bodyguard — brute and hexer
         var bodyguard = Fresh<EncounterDefinition>($"{EncounterRoot}/TheBodyguard.asset");
         bodyguard.encounterName = "The Bodyguard";
         bodyguard.type          = EncounterType.Battle;
-        bodyguard.enemySpawns   = new List<EnemySpawnEntry>
-        {
-            Spawn(brute, 2, 2),
-            Spawn(hexer, 2, 4),
-        };
+        bodyguard.enemyRoster   = new List<EnemyData> { brute, hexer };
 
-        // 5. Trap — spiker up close, archers on the flanks
+        // 5. Trap — spiker plus two archers
         var trap = Fresh<EncounterDefinition>($"{EncounterRoot}/Trap.asset");
         trap.encounterName = "Trap";
         trap.type          = EncounterType.Battle;
-        trap.enemySpawns   = new List<EnemySpawnEntry>
-        {
-            Spawn(spiker, 2, 2),
-            Spawn(archer, 0, 4),
-            Spawn(archer, 4, 4),
-        };
+        trap.enemyRoster   = new List<EnemyData> { spiker, archer, archer };
 
         SaveAll(patrol, ambush, overwhelming, bodyguard, trap);
         Debug.Log("[DeckSaver] 5 test encounters created in Assets/Run Data/Encounters/");
@@ -213,10 +191,7 @@ public static class TestDataBuilder
         var boss = Fresh<EncounterDefinition>($"{BossEncounterRoot}/StoneGolemEncounter.asset");
         boss.encounterName = "The Stone Golem";
         boss.type          = EncounterType.Battle;
-        boss.enemySpawns   = new List<EnemySpawnEntry>
-        {
-            Spawn(golem, 2, 3),
-        };
+        boss.enemyRoster   = new List<EnemyData> { golem };
 
         SaveAll(boss);
         Debug.Log("[DeckSaver] Stone Golem encounter created in Assets/Run Data/Encounters/Bosses/");
@@ -268,9 +243,6 @@ public static class TestDataBuilder
 
     private static CardEffect Stat(StatusType status, int stacks) =>
         new CardEffect { type = EffectType.Status, baseValue = stacks, hits = 1, statusType = status };
-
-    private static EnemySpawnEntry Spawn(EnemyData data, int x, int y) =>
-        new EnemySpawnEntry { data = data, position = new Vector2Int(x, y) };
 
     private static void EnsureFolder(string path)
     {

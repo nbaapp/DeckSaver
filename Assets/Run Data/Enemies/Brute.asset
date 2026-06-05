@@ -26,3 +26,8 @@ MonoBehaviour:
       baseValue: 6
       hits: 1
       statusType: 0
+    animationTrigger: 0
+  animatorController: {fileID: 9100000, guid: b6552c3aebf2795439614ec6931df748, type: 2}
+  spriteFacesRight: 1
+  deathAnimSeconds: 0.6
+  attackAnimSeconds: 0.4

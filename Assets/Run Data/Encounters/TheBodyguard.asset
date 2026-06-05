@@ -14,9 +14,11 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::EncounterDefinition
   encounterName: The Bodyguard
   type: 0
-  enemySpawns:
-  - data: {fileID: 11400000, guid: 8f1beb93c0f594ecc8d23ee99a265b66, type: 2}
-    position: {x: 2, y: 2}
-  - data: {fileID: 11400000, guid: f102bddde7a1b4b8f949b2103be2fc3a, type: 2}
-    position: {x: 2, y: 4}
+  mapPrefab: {fileID: 1183953358719304943, guid: c3f35630490da483985a8dbdf792648c, type: 3}
+  enemyRoster:
+  - {fileID: 11400000, guid: 8f1beb93c0f594ecc8d23ee99a265b66, type: 2}
+  - {fileID: 11400000, guid: f102bddde7a1b4b8f949b2103be2fc3a, type: 2}
   rewardPoolOverride: {fileID: 0}
+  musicTrack: {fileID: 11400000, guid: 6134d5c865b2b453c91aee8e0d681674, type: 2}
+  musicTransition: 1
+  musicFadeSeconds: -1

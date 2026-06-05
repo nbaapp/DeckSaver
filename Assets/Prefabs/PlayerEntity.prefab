@@ -11,7 +11,6 @@ GameObject:
   - component: {fileID: 400000}
   - component: {fileID: 21200000}
   - component: {fileID: 11400000}
-  - component: {fileID: 2563378059396574734}
   m_Layer: 0
   m_Name: PlayerEntity
   m_TagString: Untagged
@@ -107,22 +106,4 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   currentHealth: 0
   _statusEffects: []
-  commander: {fileID: 11400000, guid: 8846dc4e788a942daae301f16e58dd5f, type: 2}
-  _maxHealth: 10
-  _baseMana: 3
-  _baseStamina: 2
-  _baseMoveSpeed: 3
-  _currentMana: 0
-  _currentStamina: 0
---- !u!114 &2563378059396574734
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 100000}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 9df5e0a293e2040f39e231a517f97b63, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::PlayerMovementHandler
+  _defaultMaxHealth: 10

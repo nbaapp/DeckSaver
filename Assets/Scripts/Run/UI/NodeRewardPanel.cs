@@ -115,8 +115,9 @@ public class NodeRewardPanel : MonoBehaviour
         var run = RunCarrier.CurrentRun;
         if (run == null) return;
 
-        var pool = (_isBoss && run.Config.bossBoonPool.Count > 0)
-            ? run.Config.bossBoonPool
+        var front = run.CurrentFront;
+        var pool = (_isBoss && front != null && front.bossBoonPool.Count > 0)
+            ? front.bossBoonPool
             : run.Config.boonPool;
 
         var choices = run.GenerateBoonChoices(pool);

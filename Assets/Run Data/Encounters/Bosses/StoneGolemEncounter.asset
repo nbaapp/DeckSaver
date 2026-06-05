@@ -14,7 +14,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::EncounterDefinition
   encounterName: The Stone Golem
   type: 0
-  enemySpawns:
-  - data: {fileID: 11400000, guid: 3df0bc2115ced475cab417826e772a83, type: 2}
-    position: {x: 2, y: 3}
+  mapPrefab: {fileID: 1183953358719304943, guid: c3f35630490da483985a8dbdf792648c, type: 3}
+  enemyRoster:
+  - {fileID: 11400000, guid: 3df0bc2115ced475cab417826e772a83, type: 2}
   rewardPoolOverride: {fileID: 0}
+  musicTrack: {fileID: 11400000, guid: 836ae86e8a58348f8a9f4e92f82dcbba, type: 2}
+  musicTransition: 1
+  musicFadeSeconds: -1

@@ -132,7 +132,7 @@ public class TurnManager : MonoBehaviour
             }
             else
             {
-                enemy.ExecuteTurn();
+                yield return enemy.ExecuteTurnRoutine();
             }
 
             StatusResolver.TickEndOfTurn(enemy);

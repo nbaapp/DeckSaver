@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Text;
 using TMPro;
@@ -53,6 +54,7 @@ public abstract class Entity : MonoBehaviour
         OnHitReceived?.Invoke(net);
         RefreshStatsLabel();
         if (this is PlayerEntity && net > 0) BattleEvents.FirePlayerDamaged(net);
+        if (this is EnemyEntity ee) BattleEvents.FireEnemyHit(ee, net);
         if (currentHealth <= 0 && !_dead)
         {
             _dead = true;
@@ -196,5 +198,37 @@ public abstract class Entity : MonoBehaviour
         transform.position = GridManager.Instance.GridToWorld(gridPos);
         GridManager.Instance.GetTile(gridPos)?.SetState(TileVisualState.Occupied);
         RefreshStatsLabel();
+    }
+
+    /// <summary>Default seconds spent tweening one grid step.</summary>
+    public const float DefaultMoveStepSeconds = 0.12f;
+
+    /// <summary>
+    /// Tween this entity from its current position to <paramref name="next"/>.
+    /// Grid state (GridPosition, tile occupancy) is committed at the start so
+    /// other systems see the post-move state during the tween; only the visual
+    /// transform interpolates.
+    /// </summary>
+    public IEnumerator MoveStepRoutine(Vector2Int next, float duration = DefaultMoveStepSeconds)
+    {
+        if (GridManager.Instance == null) yield break;
+
+        Vector3 startWorld = transform.position;
+        PlaceAt(next);
+        Vector3 endWorld = transform.position;
+        BattleEvents.FireUnitMoved(this);
+
+        if (duration <= 0f) yield break;
+
+        transform.position = startWorld;
+
+        float t = 0f;
+        while (t < duration)
+        {
+            t += Time.deltaTime;
+            transform.position = Vector3.Lerp(startWorld, endWorld, Mathf.Clamp01(t / duration));
+            yield return null;
+        }
+        transform.position = endWorld;
     }
 }

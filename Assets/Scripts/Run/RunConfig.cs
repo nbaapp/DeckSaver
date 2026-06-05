@@ -48,20 +48,20 @@ public class RunConfig : ScriptableObject
     [Tooltip("Relative frequency of Event nodes.")]
     public int weightEvent = 2;
 
-    // ── Encounter Pools ───────────────────────────────────────────────────────
+    // ── Acts & Fronts ────────────────────────────────────────────────────────
 
-    [Header("Encounter Pools")]
-    [Tooltip("Encounters randomly drawn for Standard Conflict nodes.")]
-    public List<EncounterDefinition> standardConflictPool = new();
+    [Header("Acts & Fronts")]
+    [Tooltip("Act 1 configuration — three front options.")]
+    public ActConfig act1;
 
-    [Tooltip("Encounters randomly drawn for Hard Conflict nodes.")]
-    public List<EncounterDefinition> hardConflictPool = new();
+    [Tooltip("Act 2 configuration — three front options. Shift node appears on Act 2 maps.")]
+    public ActConfig act2;
 
-    [Tooltip("The boss encounter — always placed at the rightmost node.")]
-    public EncounterDefinition bossEncounter;
+    [Tooltip("Act 3 configuration — three front options. Completing this act wins the run.")]
+    public ActConfig act3;
 
-    [Tooltip("Encounters randomly drawn for Event nodes. If empty, Event nodes show no combat.")]
-    public List<EncounterDefinition> eventPool = new();
+    [Tooltip("Configuration for the Shift alternate-ending path (accessed via Act 2).")]
+    public ShiftConfig shiftConfig;
 
     // ── Rewards: Fragment Swaps ───────────────────────────────────────────────
 
@@ -78,8 +78,8 @@ public class RunConfig : ScriptableObject
     [Tooltip("Boon pool used after Hard Conflicts and Boss battles (unless boss pool overrides).")]
     public List<BoonData> boonPool = new();
 
-    [Tooltip("Optional boon pool used exclusively after Boss battles. Falls back to boonPool if empty.")]
-    public List<BoonData> bossBoonPool = new();
+    [Tooltip("Shards awarded per encounter on the shift path.")]
+    public int shardsPerShiftEncounter = 10;
 
     // ── Shop ──────────────────────────────────────────────────────────────────
 

@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -21,6 +22,9 @@ public class PlayerMovementHandler : MonoBehaviour
 
     public bool IsInMoveMode { get; private set; }
 
+    /// <summary>True while a player unit is mid-tween between tiles.</summary>
+    public bool IsExecutingMove { get; private set; }
+
     // BFS result: gridPos → (distance, parent pos)
     private Dictionary<Vector2Int, (int dist, Vector2Int parent)> _reachable;
 
@@ -29,16 +33,26 @@ public class PlayerMovementHandler : MonoBehaviour
 
     // ── Unity lifecycle ───────────────────────────────────────────────────────
 
-    private void Awake() => Instance = this;
+    private void Awake()
+    {
+        if (Instance != null && Instance != this)
+        {
+            Destroy(this);
+            return;
+        }
+        Instance = this;
+    }
 
     private void OnEnable()
     {
+        if (Instance != this) return;
         GridInputHandler.OnTileClicked += HandleTileClicked;
         GridInputHandler.OnTileHovered += HandleTileHovered;
     }
 
     private void OnDisable()
     {
+        if (Instance != this) return;
         GridInputHandler.OnTileClicked -= HandleTileClicked;
         GridInputHandler.OnTileHovered -= HandleTileHovered;
     }
@@ -72,6 +86,7 @@ public class PlayerMovementHandler : MonoBehaviour
     private void HandleTileClicked(GridTile tile)
     {
         if (TurnManager.Instance?.CurrentPhase != TurnPhase.PlayerTurn) return;
+        if (IsExecutingMove) return;
 
         // ── Unit selection ────────────────────────────────────────────────────
         // Check whether the clicked tile contains any player unit.
@@ -135,6 +150,8 @@ public class PlayerMovementHandler : MonoBehaviour
 
     private void HandleTileHovered(GridTile tile)
     {
+        if (IsExecutingMove) return;
+
         // Show/hide dim zones when hovering over the player tile (without entering move mode).
         if (!IsInMoveMode)
         {
@@ -340,10 +357,18 @@ public class PlayerMovementHandler : MonoBehaviour
 
     // ── Movement execution ────────────────────────────────────────────────────
 
-    private static void ExecuteMove(PlayerEntity player, List<Vector2Int> path)
+    private void ExecuteMove(PlayerEntity player, List<Vector2Int> path)
     {
         if (path.Count == 0) return;
-        player.PlaceAt(path[path.Count - 1]);
+        StartCoroutine(ExecuteMoveRoutine(player, path));
+    }
+
+    private IEnumerator ExecuteMoveRoutine(PlayerEntity player, List<Vector2Int> path)
+    {
+        IsExecutingMove = true;
+        foreach (var step in path)
+            yield return player.MoveStepRoutine(step);
+        IsExecutingMove = false;
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

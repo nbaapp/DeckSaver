@@ -608,6 +608,55 @@ public static class RunSceneBuilder
 
         runOverRT.gameObject.SetActive(false);
 
+        // ── FrontSelectionPanel ───────────────────────────────────────────────
+
+        var frontSelRT = Panel("FrontSelectionPanel", canvas.transform,
+            new Vector2(0.20f, 0.20f), new Vector2(0.80f, 0.85f),
+            new Color(0.05f, 0.05f, 0.10f, 0.97f));
+        var frontSelPanel = frontSelRT.gameObject.AddComponent<FrontSelectionPanel>();
+
+        var frontHeaderTMP = UIText("Header", frontSelRT,
+            new Vector2(0.05f, 0.82f), new Vector2(0.95f, 0.96f),
+            "Choose Your Front", 24f, bold: true, color: Color.white);
+
+        // Three front buttons stacked vertically
+        var frontBtn1RT = UI("FrontButton1", frontSelRT);
+        frontBtn1RT.anchorMin = new Vector2(0.10f, 0.58f);
+        frontBtn1RT.anchorMax = new Vector2(0.90f, 0.76f);
+        frontBtn1RT.offsetMin = frontBtn1RT.offsetMax = Vector2.zero;
+        frontBtn1RT.gameObject.AddComponent<Image>().color = new Color(0.12f, 0.18f, 0.30f, 1f);
+        var frontBtn1 = frontBtn1RT.gameObject.AddComponent<Button>();
+        var frontLabel1 = UIText("Label", frontBtn1RT, Vector2.zero, Vector2.one,
+            "Front 1", 16f, bold: true, color: Color.white);
+
+        var frontBtn2RT = UI("FrontButton2", frontSelRT);
+        frontBtn2RT.anchorMin = new Vector2(0.10f, 0.36f);
+        frontBtn2RT.anchorMax = new Vector2(0.90f, 0.54f);
+        frontBtn2RT.offsetMin = frontBtn2RT.offsetMax = Vector2.zero;
+        frontBtn2RT.gameObject.AddComponent<Image>().color = new Color(0.12f, 0.18f, 0.30f, 1f);
+        var frontBtn2 = frontBtn2RT.gameObject.AddComponent<Button>();
+        var frontLabel2 = UIText("Label", frontBtn2RT, Vector2.zero, Vector2.one,
+            "Front 2", 16f, bold: true, color: Color.white);
+
+        var frontBtn3RT = UI("FrontButton3", frontSelRT);
+        frontBtn3RT.anchorMin = new Vector2(0.10f, 0.14f);
+        frontBtn3RT.anchorMax = new Vector2(0.90f, 0.32f);
+        frontBtn3RT.offsetMin = frontBtn3RT.offsetMax = Vector2.zero;
+        frontBtn3RT.gameObject.AddComponent<Image>().color = new Color(0.12f, 0.18f, 0.30f, 1f);
+        var frontBtn3 = frontBtn3RT.gameObject.AddComponent<Button>();
+        var frontLabel3 = UIText("Label", frontBtn3RT, Vector2.zero, Vector2.one,
+            "Front 3", 16f, bold: true, color: Color.white);
+
+        SetRef(frontSelPanel, "_frontButton1", frontBtn1);
+        SetRef(frontSelPanel, "_frontButton2", frontBtn2);
+        SetRef(frontSelPanel, "_frontButton3", frontBtn3);
+        SetRef(frontSelPanel, "_frontLabel1",  frontLabel1);
+        SetRef(frontSelPanel, "_frontLabel2",  frontLabel2);
+        SetRef(frontSelPanel, "_frontLabel3",  frontLabel3);
+        SetRef(frontSelPanel, "_headerText",   frontHeaderTMP);
+
+        frontSelRT.gameObject.SetActive(false);
+
         // ── HUD strip (always on top — added last to render above panels) ─────
 
         var hudRT = UI("HUD", canvas.transform);
@@ -629,6 +678,7 @@ public static class RunSceneBuilder
         SetRef(controller, "_campPanel",         campPanel);
         SetRef(controller, "_shopPanel",         shopPanel);
         SetRef(controller, "_runOverPanel",      runOverPanel);
+        SetRef(controller, "_frontSelectionPanel", frontSelPanel);
         SetRef(controller, "_moneyText",         moneyTMP);
 
         // ── Render order: modal panels always above map ───────────────────────
@@ -636,6 +686,7 @@ public static class RunSceneBuilder
         swapPanelRT.SetAsLastSibling();
         boonRewardRT.SetAsLastSibling();
         nodeRewardRT.SetAsLastSibling();
+        frontSelRT.SetAsLastSibling();
         runOverRT.SetAsLastSibling();
         hudRT.SetAsLastSibling();
 

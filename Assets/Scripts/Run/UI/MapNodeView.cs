@@ -23,6 +23,7 @@ public class MapNodeView : MonoBehaviour
     [SerializeField] private Sprite _iconCamp;
     [SerializeField] private Sprite _iconShop;
     [SerializeField] private Sprite _iconEvent;
+    [SerializeField] private Sprite _iconShift;
 
     [Header("Node Type Colors")]
     [SerializeField] private Color _colorStart            = new Color(0.6f, 0.6f, 0.6f);
@@ -32,6 +33,7 @@ public class MapNodeView : MonoBehaviour
     [SerializeField] private Color _colorCamp             = new Color(0.3f, 0.8f, 0.4f);
     [SerializeField] private Color _colorShop             = new Color(0.9f, 0.8f, 0.2f);
     [SerializeField] private Color _colorEvent            = new Color(0.7f, 0.3f, 0.9f);
+    [SerializeField] private Color _colorShift            = new Color(0.2f, 0.9f, 0.9f);
 
     [Header("State Overrides")]
     [SerializeField] private Color _colorVisited = new Color(0.25f, 0.25f, 0.25f);
@@ -90,6 +92,7 @@ public class MapNodeView : MonoBehaviour
         NodeType.Camp             => "Camp",
         NodeType.Shop             => "Shop",
         NodeType.Event            => "Event",
+        NodeType.Shift            => "Shift",
         _                         => "?",
     };
 
@@ -102,6 +105,7 @@ public class MapNodeView : MonoBehaviour
         NodeType.Camp             => _iconCamp,
         NodeType.Shop             => _iconShop,
         NodeType.Event            => _iconEvent,
+        NodeType.Shift            => _iconShift,
         _                         => null,
     };
 
@@ -114,6 +118,7 @@ public class MapNodeView : MonoBehaviour
         NodeType.Camp             => _colorCamp,
         NodeType.Shop             => _colorShop,
         NodeType.Event            => _colorEvent,
+        NodeType.Shift            => _colorShift,
         _                         => Color.white,
     };
 }

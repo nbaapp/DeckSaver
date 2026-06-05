@@ -5,19 +5,23 @@ using UnityEngine;
 /// <summary>
 /// Procedurally generates the run map graph.
 ///
-/// Generation steps:
+/// Generation steps (standard map):
 ///   1. Place the Start node at the far left, vertically centred. No encounter.
 ///   2. Place the Boss node at the far right.
 ///   3. Scatter (N-2) content nodes across the middle of the map.
 ///   4. Assign node types and encounters to content nodes (before edges, to avoid type confusion).
-///   5. Build edges among non-Start nodes within reachRadius.
-///   6. Guarantee connectivity among non-Start nodes.
-///   7. Connect Start to its nearest few content nodes only.
-///   8. Pre-enter the Start node so GetReachableNodes() returns its neighbors immediately.
+///   5. Optionally place a single Shift node (Act 2 only).
+///   6. Build edges among non-Start nodes within reachRadius.
+///   7. Guarantee connectivity among non-Start nodes.
+///   8. Connect Start to its nearest few content nodes only.
+///   9. Pre-enter the Start node so GetReachableNodes() returns its neighbors immediately.
+///
+/// Shift map generation creates a purely linear path:
+///   Start → N encounters → Camp → Boss
 /// </summary>
 public static class MapGenerator
 {
-    public static MapGraph Generate(RunConfig config)
+    public static MapGraph Generate(RunConfig config, FrontConfig front, bool includeShiftNode)
     {
         int totalNodes   = Random.Range(config.minNodes, config.maxNodes + 1);
         int contentCount = totalNodes - 2; // excludes Start and Boss
@@ -41,7 +45,7 @@ public static class MapGenerator
             Id        = 1,
             Type      = NodeType.Boss,
             Position  = new Vector2(config.mapWidth * 0.92f, bossY),
-            Encounter = config.bossEncounter,
+            Encounter = front.bossEncounter,
         };
         graph.Nodes.Add(bossNode);
         graph.BossNodeId = 1;
@@ -57,18 +61,96 @@ public static class MapGenerator
         }
 
         // ── 4. Assign types and encounters (before edges, uses ID-based filter)
-        AssignTypesAndEncounters(graph, config);
+        AssignTypesAndEncounters(graph, config, front);
 
-        // ── 5. Build edges (content + boss only; Start wired separately) ──────
+        // ── 5. Optionally place a Shift node (Act 2 only) ────────────────────
+        if (includeShiftNode)
+            PlaceShiftNode(graph);
+
+        // ── 6. Build edges (content + boss only; Start wired separately) ──────
         BuildEdges(graph, config.reachRadius);
 
-        // ── 6. Guarantee connectivity among content+boss nodes ────────────────
+        // ── 7. Guarantee connectivity among content+boss nodes ────────────────
         EnsureConnectivity(graph, excludeId: graph.StartNodeId);
 
-        // ── 7. Connect Start to its nearest content nodes only ────────────────
+        // ── 8. Connect Start to its nearest content nodes only ────────────────
         ConnectStartNode(graph, startNode, connectionCount: 3);
 
-        // ── 8. Pre-enter Start so its neighbors are immediately reachable ──────
+        // ── 9. Pre-enter Start so its neighbors are immediately reachable ──────
+        graph.CurrentNodeId = startNode.Id;
+        startNode.Visited   = true;
+
+        return graph;
+    }
+
+    /// <summary>
+    /// Generates the linear shift map: Start → encounters → Camp → Boss.
+    /// </summary>
+    public static MapGraph GenerateShiftMap(RunConfig config, ShiftConfig shift)
+    {
+        var graph = new MapGraph();
+        int encounterCount = Mathf.Max(1, shift.nodeCount - 2); // subtract camp and boss
+
+        int id = 0;
+
+        // Start node
+        var startNode = new MapNode
+        {
+            Id       = id,
+            Type     = NodeType.Start,
+            Position = new Vector2(0, config.mapHeight * 0.5f),
+        };
+        graph.Nodes.Add(startNode);
+        graph.StartNodeId = id;
+        id++;
+
+        float totalWidth = config.mapWidth;
+        int totalContentNodes = encounterCount + 2; // encounters + camp + boss
+        float spacing = totalWidth / (totalContentNodes + 1);
+
+        // Encounter nodes
+        for (int i = 0; i < encounterCount; i++)
+        {
+            var node = new MapNode
+            {
+                Id        = id,
+                Type      = NodeType.StandardConflict,
+                Position  = new Vector2(spacing * (i + 1), config.mapHeight * 0.5f),
+                Encounter = PickRandom(shift.shiftEncounterPool),
+            };
+            graph.Nodes.Add(node);
+            id++;
+        }
+
+        // Camp node
+        var campNode = new MapNode
+        {
+            Id       = id,
+            Type     = NodeType.Camp,
+            Position = new Vector2(spacing * (encounterCount + 1), config.mapHeight * 0.5f),
+        };
+        graph.Nodes.Add(campNode);
+        id++;
+
+        // Boss node
+        var bossNode = new MapNode
+        {
+            Id        = id,
+            Type      = NodeType.Boss,
+            Position  = new Vector2(totalWidth, config.mapHeight * 0.5f),
+            Encounter = shift.shiftBossEncounter,
+        };
+        graph.Nodes.Add(bossNode);
+        graph.BossNodeId = id;
+
+        // Wire linearly: each node connects only to the next
+        for (int i = 0; i < graph.Nodes.Count - 1; i++)
+        {
+            graph.Nodes[i].NeighborIds.Add(graph.Nodes[i + 1].Id);
+            graph.Nodes[i + 1].NeighborIds.Add(graph.Nodes[i].Id);
+        }
+
+        // Pre-enter Start
         graph.CurrentNodeId = startNode.Id;
         startNode.Visited   = true;
 
@@ -105,7 +187,7 @@ public static class MapGenerator
 
     // ── Step 4: Type and encounter assignment (ID-based filter) ──────────────
 
-    private static void AssignTypesAndEncounters(MapGraph graph, RunConfig config)
+    private static void AssignTypesAndEncounters(MapGraph graph, RunConfig config, FrontConfig front)
     {
         var typePool = new List<NodeType>();
         AddWeighted(typePool, NodeType.StandardConflict, config.weightStandard);
@@ -128,15 +210,31 @@ public static class MapGenerator
 
             node.Encounter = node.Type switch
             {
-                NodeType.StandardConflict => PickRandom(config.standardConflictPool),
-                NodeType.HardConflict     => PickRandom(config.hardConflictPool),
-                NodeType.Event            => PickRandom(config.eventPool),
+                NodeType.StandardConflict => PickRandom(front.standardConflictPool),
+                NodeType.HardConflict     => PickRandom(front.hardConflictPool),
+                NodeType.Event            => PickRandom(front.eventPool),
                 _                         => null,
             };
         }
     }
 
-    // ── Step 5: Edge building (skips the Start node) ─────────────────────────
+    // ── Step 5: Place a single Shift node ────────────────────────────────────
+
+    private static void PlaceShiftNode(MapGraph graph)
+    {
+        var contentNodes = graph.Nodes
+            .Where(n => n.Id != graph.StartNodeId && n.Id != graph.BossNodeId)
+            .ToList();
+
+        if (contentNodes.Count == 0) return;
+
+        var chosen = contentNodes[Random.Range(0, contentNodes.Count)];
+        chosen.Type      = NodeType.Shift;
+        chosen.Encounter = null;
+        graph.ShiftNodeId = chosen.Id;
+    }
+
+    // ── Step 6: Edge building (skips the Start node) ─────────────────────────
 
     private static void BuildEdges(MapGraph graph, float reachRadius)
     {
@@ -159,7 +257,7 @@ public static class MapGenerator
         }
     }
 
-    // ── Step 6: Connectivity guarantee (among non-Start nodes) ───────────────
+    // ── Step 7: Connectivity guarantee (among non-Start nodes) ───────────────
 
     private static void EnsureConnectivity(MapGraph graph, int excludeId)
     {
@@ -215,7 +313,7 @@ public static class MapGenerator
         return visited;
     }
 
-    // ── Step 7: Connect Start to nearest content nodes ────────────────────────
+    // ── Step 8: Connect Start to nearest content nodes ────────────────────────
 
     private static void ConnectStartNode(MapGraph graph, MapNode startNode, int connectionCount)
     {

@@ -14,9 +14,11 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::EncounterDefinition
   encounterName: Patrol
   type: 0
-  enemySpawns:
-  - data: {fileID: 11400000, guid: e884144e3079946eca18db49fc77bf29, type: 2}
-    position: {x: 1, y: 3}
-  - data: {fileID: 11400000, guid: e884144e3079946eca18db49fc77bf29, type: 2}
-    position: {x: 3, y: 3}
+  mapPrefab: {fileID: 1183953358719304943, guid: c3f35630490da483985a8dbdf792648c, type: 3}
+  enemyRoster:
+  - {fileID: 11400000, guid: e884144e3079946eca18db49fc77bf29, type: 2}
+  - {fileID: 11400000, guid: e884144e3079946eca18db49fc77bf29, type: 2}
   rewardPoolOverride: {fileID: 0}
+  musicTrack: {fileID: 11400000, guid: 6134d5c865b2b453c91aee8e0d681674, type: 2}
+  musicTransition: 1
+  musicFadeSeconds: -1

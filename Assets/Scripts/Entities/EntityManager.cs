@@ -1,20 +1,21 @@
-using System;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
-
-[Serializable]
-public class EnemySpawnEntry
-{
-    public EnemyData data;
-    public Vector2Int position;
-}
+using UnityEngine.Tilemaps;
 
 /// <summary>
 /// Spawns and tracks all entities (player units + enemies) on the grid.
 ///
-/// Player unit count and starting HPs are read from RunState if a run is
-/// active; otherwise all <see cref="playerStartPositions"/> slots are used
-/// and each unit starts at full HP.
+/// At Start():
+///   1. Resolve the encounter (from RunCarrier, or fallback to inspector data).
+///   2. Instantiate the encounter's painted map prefab (or build a programmatic
+///      default rectangle when none is assigned).
+///   3. Register the map's Grid + Ground/Overlay tilemaps with GridManager.
+///   4. Read SpawnMarker children to place player units and enemies on the
+///      cells the designer painted them at.
+///
+/// Player unit count and starting HPs come from RunState if a run is active;
+/// otherwise every PlayerSpawn marker is filled from a fresh full-HP unit.
 ///
 /// [RequireComponent] ensures a PlayerParty is always co-located on this GO.
 /// </summary>
@@ -23,23 +24,27 @@ public class EntityManager : MonoBehaviour
 {
     public static EntityManager Instance { get; private set; }
 
-    [Header("Player")]
+    [Header("Prefabs")]
     public GameObject playerPrefab;
-
-    [Tooltip("Spawn position for each unit, indexed to match RunState.UnitHealths order.")]
-    public List<Vector2Int> playerStartPositions = new()
-    {
-        new Vector2Int(1, 0),
-        new Vector2Int(1, 1),
-        new Vector2Int(1, 2),
-    };
-
-    [Header("Enemies")]
     public GameObject enemyPrefab;
-    public List<EnemySpawnEntry> enemySpawns = new();
+
+    [Header("Map fallback")]
+    [Tooltip("Used as the playfield when an encounter has no mapPrefab assigned. " +
+             "Drag any TileBase from the iso pack here.")]
+    [SerializeField] private TileBase defaultGroundTile;
+
+    [Header("Inspector-only fallback (no run active)")]
+    [Tooltip("Encounter to use when there is no RunCarrier.CurrentRun (i.e. " +
+             "you opened the Battle scene directly).")]
+    [SerializeField] private EncounterDefinition fallbackEncounter;
+
+    [Tooltip("Enemy roster used when neither a run nor a fallback encounter is set.")]
+    [SerializeField] private List<EnemyData> fallbackEnemyRoster = new();
 
     private readonly List<PlayerEntity> _players = new();
     private readonly List<EnemyEntity>  _enemies = new();
+
+    private GameObject _mapInstance;
 
     // ── Public API ────────────────────────────────────────────────────────────
 
@@ -83,37 +88,92 @@ public class EntityManager : MonoBehaviour
 
     private void Start()
     {
-        // Override inspector enemy list with the current encounter if inside a run.
-        var run = RunCarrier.CurrentRun;
-        if (run != null)
+        var encounter = RunCarrier.CurrentRun?.Map.CurrentNode?.Encounter ?? fallbackEncounter;
+        var roster    = encounter != null ? encounter.enemyRoster : fallbackEnemyRoster;
+
+        LoadMap(encounter);
+        SpawnAll(roster);
+        StartEncounterMusic(encounter);
+    }
+
+    private static void StartEncounterMusic(EncounterDefinition encounter)
+    {
+        if (AudioManager.Instance == null) return;
+        if (encounter == null) { AudioManager.Instance.StopMusic(); return; }
+        AudioManager.Instance.PlayMusic(
+            encounter.musicTrack,
+            encounter.musicTransition,
+            encounter.musicFadeSeconds);
+    }
+
+    // ── Map loading ───────────────────────────────────────────────────────────
+
+    private void LoadMap(EncounterDefinition encounter)
+    {
+        var prefab = encounter != null ? encounter.mapPrefab : null;
+
+        _mapInstance = prefab != null
+            ? Instantiate(prefab)
+            : IsoMapBuilder.BuildDefault(defaultGroundTile);
+
+        if (_mapInstance == null)
         {
-            var encounter = run.Map.CurrentNode?.Encounter;
-            if (encounter != null)
-                enemySpawns = encounter.enemySpawns;
+            Debug.LogError("[EntityManager] Failed to load a playfield map. Assign defaultGroundTile " +
+                           "or set encounter.mapPrefab.");
+            return;
         }
 
-        SpawnAll();
+        _mapInstance.name = "EncounterMap";
+
+        var grid    = _mapInstance.GetComponentInChildren<Grid>();
+        var ground  = FindTilemapByName(_mapInstance, "Ground");
+        var overlay = FindTilemapByName(_mapInstance, "Overlay");
+
+        if (grid == null || ground == null)
+        {
+            Debug.LogError("[EntityManager] Map prefab is missing Grid or Ground tilemap.");
+            return;
+        }
+
+        GridManager.Instance?.RegisterMap(grid, ground, overlay);
+    }
+
+    private static Tilemap FindTilemapByName(GameObject root, string name)
+    {
+        foreach (var tm in root.GetComponentsInChildren<Tilemap>(true))
+            if (tm.gameObject.name == name) return tm;
+        return null;
     }
 
     // ── Spawning ──────────────────────────────────────────────────────────────
 
-    private void SpawnAll()
+    private void SpawnAll(List<EnemyData> enemyRoster)
     {
-        SpawnPlayers();
-        foreach (var entry in enemySpawns)
-            SpawnEnemy(entry);
+        if (_mapInstance == null) return;
+
+        var markers = _mapInstance.GetComponentsInChildren<SpawnMarker>(true);
+        var playerSlots = markers.Where(m => m.kind == SpawnMarkerKind.Player)
+                                 .OrderBy(m => m.slotIndex)
+                                 .ToList();
+        var enemySlots  = markers.Where(m => m.kind == SpawnMarkerKind.Enemy)
+                                 .OrderBy(m => m.slotIndex)
+                                 .ToList();
+
+        SpawnPlayers(playerSlots);
+        SpawnEnemies(enemySlots, enemyRoster);
     }
 
-    private void SpawnPlayers()
+    private void SpawnPlayers(List<SpawnMarker> playerSlots)
     {
-        if (playerPrefab == null) return;
+        if (playerPrefab == null || playerSlots.Count == 0) return;
 
         var party = GetComponent<PlayerParty>();
         var run   = RunCarrier.CurrentRun;
 
-        int   unitCount = run != null ? run.UnitCount
-                        : Mathf.Max(1, playerStartPositions.Count);
-        int   maxHp     = run?.Config.unitMaxHealth ?? 10;
+        int unitCount = run != null
+            ? Mathf.Min(run.UnitCount, playerSlots.Count)
+            : playerSlots.Count;
+        int maxHp = run?.Config.unitMaxHealth ?? 10;
 
         for (int i = 0; i < unitCount; i++)
         {
@@ -121,9 +181,7 @@ public class EntityManager : MonoBehaviour
                 ? run.UnitHealths[i]
                 : maxHp;
 
-            var pos = i < playerStartPositions.Count
-                ? playerStartPositions[i]
-                : new Vector2Int(i, 0);
+            var pos = MarkerCell(playerSlots[i]);
 
             var unit = Instantiate(playerPrefab).GetComponent<PlayerEntity>();
             unit.InitHealth(currentHp, maxHp);
@@ -133,12 +191,34 @@ public class EntityManager : MonoBehaviour
         }
     }
 
-    private void SpawnEnemy(EnemySpawnEntry entry)
+    private void SpawnEnemies(List<SpawnMarker> enemySlots, List<EnemyData> enemyRoster)
     {
-        if (enemyPrefab == null || entry.data == null) return;
-        var enemy = Instantiate(enemyPrefab).GetComponent<EnemyEntity>();
-        enemy.Init(entry.data);
-        enemy.PlaceAt(entry.position);
-        _enemies.Add(enemy);
+        if (enemyPrefab == null || enemyRoster == null) return;
+
+        for (int i = 0; i < enemyRoster.Count; i++)
+        {
+            if (i >= enemySlots.Count)
+            {
+                Debug.LogWarning($"[EntityManager] Encounter has {enemyRoster.Count} enemies but " +
+                                 $"map only has {enemySlots.Count} EnemySpawn markers. Ignoring extras.");
+                break;
+            }
+
+            var data = enemyRoster[i];
+            if (data == null) continue;
+
+            var enemy = Instantiate(enemyPrefab).GetComponent<EnemyEntity>();
+            enemy.Init(data);
+            enemy.PlaceAt(MarkerCell(enemySlots[i]));
+            _enemies.Add(enemy);
+        }
+    }
+
+    private static Vector2Int MarkerCell(SpawnMarker marker)
+    {
+        var grid = GridManager.Instance?.Grid;
+        if (grid == null) return Vector2Int.zero;
+        var cell = grid.WorldToCell(marker.transform.position);
+        return new Vector2Int(cell.x, cell.y);
     }
 }

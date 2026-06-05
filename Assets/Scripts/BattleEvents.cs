@@ -32,8 +32,14 @@ public static class BattleEvents
     /// <summary>Fired when the player loses HP (net damage after block > 0). Arg: net HP lost.</summary>
     public static event Action<int> OnPlayerDamaged;
 
+    /// <summary>Fired when an enemy takes a hit. Args: enemy, net damage after block (0 if fully absorbed).</summary>
+    public static event Action<EnemyEntity, int> OnEnemyHit;
+
     /// <summary>Fired when an enemy is killed.</summary>
     public static event Action<EnemyEntity> OnEnemyKilled;
+
+    /// <summary>Fired whenever any unit (player or enemy) finishes a single grid step.</summary>
+    public static event Action<Entity> OnUnitMoved;
 
     /// <summary>Fired when a player unit is permanently killed (removed from the run).</summary>
     public static event Action<PlayerEntity> OnUnitDied;
@@ -52,7 +58,9 @@ public static class BattleEvents
     public static void FirePlayerBlockGain(int amount)                    => OnPlayerBlockGain?.Invoke(amount);
     public static void FirePlayerHit(Entity attacker, int damage)         => OnPlayerHit?.Invoke(attacker, damage);
     public static void FirePlayerDamaged(int net)                         => OnPlayerDamaged?.Invoke(net);
+    public static void FireEnemyHit(EnemyEntity enemy, int net)          => OnEnemyHit?.Invoke(enemy, net);
     public static void FireEnemyKilled(EnemyEntity enemy)                 => OnEnemyKilled?.Invoke(enemy);
+    public static void FireUnitMoved(Entity unit)                         => OnUnitMoved?.Invoke(unit);
     public static void FireUnitDied(PlayerEntity unit)                    => OnUnitDied?.Invoke(unit);
     public static void FirePlayerStatusReceived(StatusType t, int stacks) => OnPlayerStatusReceived?.Invoke(t, stacks);
 }

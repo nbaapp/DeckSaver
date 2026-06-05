@@ -26,6 +26,7 @@ MonoBehaviour:
       baseValue: 3
       hits: 1
       statusType: 11
+    animationTrigger: 3
   - attackName: Jab
     patternType: 0
     moveRange: 1
@@ -36,3 +37,8 @@ MonoBehaviour:
       baseValue: 2
       hits: 1
       statusType: 0
+    animationTrigger: 0
+  animatorController: {fileID: 9100000, guid: 31193055c1a5c4d46acf0cf8d3686ea8, type: 2}
+  spriteFacesRight: 1
+  deathAnimSeconds: 0.6
+  attackAnimSeconds: 0.4

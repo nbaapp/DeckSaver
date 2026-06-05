@@ -13,6 +13,7 @@ public class MapGraph
     public List<MapNode> Nodes      = new();
     public int           StartNodeId = -1;
     public int           BossNodeId  = -1;
+    public int           ShiftNodeId = -1;
 
     /// <summary>The node the player is currently at. Set to the Start node at generation time.</summary>
     public int CurrentNodeId = -1;

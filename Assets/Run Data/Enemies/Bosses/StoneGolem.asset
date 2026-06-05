@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: StoneGolem
   m_EditorClassIdentifier: Assembly-CSharp::EnemyData
   enemyName: Stone Golem
-  artwork: {fileID: -2135585597343286014, guid: 5aa8b770bc43046bc8d993d0d5b7f4a5, type: 3}
+  artwork: {fileID: -6017490860483724875, guid: 74061816db95d48429e43602c667685d, type: 3}
   maxHealth: 40
   attacks:
   - attackName: Slam
@@ -29,6 +29,7 @@ MonoBehaviour:
       baseValue: 6
       hits: 1
       statusType: 0
+    animationTrigger: 0
   - attackName: Tremor
     patternType: 2
     moveRange: 0
@@ -44,6 +45,7 @@ MonoBehaviour:
       baseValue: 4
       hits: 1
       statusType: 0
+    animationTrigger: 1
   - attackName: Fortify
     patternType: 0
     moveRange: 0
@@ -58,3 +60,8 @@ MonoBehaviour:
       baseValue: 8
       hits: 1
       statusType: 0
+    animationTrigger: 2
+  animatorController: {fileID: 9100000, guid: de73cdbd51b1a4e429a03c2fe0f351a1, type: 2}
+  spriteFacesRight: 1
+  deathAnimSeconds: 0.6
+  attackAnimSeconds: 0.4

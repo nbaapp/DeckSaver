@@ -23,15 +23,10 @@ MonoBehaviour:
   weightCamp: 1
   weightShop: 1
   weightEvent: 2
-  standardConflictPool:
-  - {fileID: 11400000, guid: 65f50ab7d782f4d918e5871ce61f5e09, type: 2}
-  - {fileID: 11400000, guid: 5133f1093660441438fdf88c9d420cf7, type: 2}
-  - {fileID: 11400000, guid: 32640425e155a4599a973f50ef32dd63, type: 2}
-  hardConflictPool:
-  - {fileID: 11400000, guid: 4d2e3a5d6209742cdb5df36a5d771f73, type: 2}
-  - {fileID: 11400000, guid: 5fa6989d1d7824da4bd38338a7c75008, type: 2}
-  bossEncounter: {fileID: 11400000, guid: d2b86dd089e74445eb396d4b6f0e7b2f, type: 2}
-  eventPool: []
+  act1: {fileID: 11400000, guid: a53faff01455c44cda11b62e6e3fba92, type: 2}
+  act2: {fileID: 11400000, guid: 1bf70a3d729ab4939ac967e9257412b5, type: 2}
+  act3: {fileID: 11400000, guid: 0768d49a6d991448cab6016f8fc70dcd, type: 2}
+  shiftConfig: {fileID: 11400000, guid: 0a1be338631f4485ab82d7c7d48b3993, type: 2}
   fragmentSwapPool: {fileID: 11400000, guid: 7c6717878d6464217aff427007aee256, type: 2}
   boonOfferCount: 3
   boonPool:
@@ -46,18 +41,7 @@ MonoBehaviour:
   - {fileID: 11400000, guid: 92dd7dc343e664d61869b1eb9f33d670, type: 2}
   - {fileID: 11400000, guid: 31ec9de84ae0b4afb828253e194a8529, type: 2}
   - {fileID: 11400000, guid: d6bb2ef4bb32a4f91b1dfcebea86ae0a, type: 2}
-  bossBoonPool:
-  - {fileID: 11400000, guid: bd05ef6358547467d90526dcef89246d, type: 2}
-  - {fileID: 11400000, guid: 2f304f08dfa214f60afb014c981d3fd4, type: 2}
-  - {fileID: 11400000, guid: a9d51e18b70cf4d30b84e4ca814c4d04, type: 2}
-  - {fileID: 11400000, guid: 61e2cffd75d1945fd90666cb0d7eb454, type: 2}
-  - {fileID: 11400000, guid: 96f62a8c3880f495cbfa380fb30ca17c, type: 2}
-  - {fileID: 11400000, guid: 5edd0f1866a9344398059f8dbb5b5761, type: 2}
-  - {fileID: 11400000, guid: 544d0361321ef4b13af700005552cc81, type: 2}
-  - {fileID: 11400000, guid: a9aa42401bcc643f391c53b7337676a2, type: 2}
-  - {fileID: 11400000, guid: 92dd7dc343e664d61869b1eb9f33d670, type: 2}
-  - {fileID: 11400000, guid: 31ec9de84ae0b4afb828253e194a8529, type: 2}
-  - {fileID: 11400000, guid: d6bb2ef4bb32a4f91b1dfcebea86ae0a, type: 2}
+  shardsPerShiftEncounter: 10
   shopEffectFragments:
   - {fileID: 11400000, guid: ef01ef010000000000000000ef01ef01, type: 2}
   - {fileID: 11400000, guid: ef0aef0a0000000000000000ef0aef0a, type: 2}

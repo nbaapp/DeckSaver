@@ -23,4 +23,7 @@ public enum NodeType
 
     /// <summary>A random event with variable outcomes.</summary>
     Event,
+
+    /// <summary>The Shift node — entering this triggers the alternate ending path. Only appears in Act 2.</summary>
+    Shift,
 }

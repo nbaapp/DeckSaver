@@ -1,182 +1,142 @@
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Tilemaps;
 
-[ExecuteAlways]
+/// <summary>
+/// Owns the per-battle isometric playfield: a Grid + Ground/Overlay Tilemaps
+/// instantiated from an EncounterDefinition's painted map prefab (or the
+/// programmatic default rectangle when none is assigned).
+///
+/// The "shape" of the playfield is whatever cells the Ground tilemap has
+/// painted — a cell is in-bounds (and walkable) iff the ground tilemap
+/// has any tile at that cell. Future obstacle tile types will only need
+/// to extend IsInBounds with a per-tile attribute lookup.
+///
+/// Per-cell visual feedback (move/range/hover/hazard) is driven through a
+/// parallel Overlay tilemap whose cells are tinted via Tilemap.SetColor.
+/// </summary>
 public class GridManager : MonoBehaviour
 {
     public static GridManager Instance { get; private set; }
 
-    [Header("Grid Settings")]
-    public int width = 5;
-    public int height = 5;
-    public float tileSize = 1f;
-    public float tileGap = 0f;
+    /// <summary>The Grid component of the currently loaded map.</summary>
+    public Grid Grid { get; private set; }
 
-    [Header("Visual")]
-    public Color lineColor = new(0.45f, 0.45f, 0.45f, 1f);
-    public float lineWidth = 0.04f;
+    /// <summary>The painted ground tilemap. Defines the playfield shape.</summary>
+    public Tilemap Ground { get; private set; }
 
-    [Header("References")]
-    public GameObject tilePrefab;
+    /// <summary>The overlay tilemap used to draw cell tints.</summary>
+    public Tilemap Overlay { get; private set; }
 
-    private GridTile[,] _tiles;
+    private readonly Dictionary<Vector2Int, GridTile> _tiles = new();
 
     private void Awake()
     {
-        if (Application.isPlaying)
-            Instance = this;
+        Instance = this;
 
-        RebuildGrid();
-    }
-
-    private void RebuildGrid()
-    {
-        ClearGrid();
-        if (tilePrefab == null) return;
-        SpawnGrid();
-        SpawnGridLines();
-    }
-
-    private void ClearGrid()
-    {
-        _tiles = null;
-        for (int i = transform.childCount - 1; i >= 0; i--)
+        // Y-sort so entities and iso tile rows compose correctly.
+        if (Camera.main != null)
         {
-            var child = transform.GetChild(i).gameObject;
-            if (Application.isPlaying)
-                Destroy(child);
-            else
-                DestroyImmediate(child);
+            Camera.main.transparencySortMode = TransparencySortMode.CustomAxis;
+            Camera.main.transparencySortAxis = new Vector3(0f, 1f, 0f);
         }
     }
 
-    private void SpawnGrid()
+    // ── Map registration ──────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Register the tilemaps from a freshly instantiated map prefab.
+    /// Builds a GridTile for every cell that has a ground tile, paints the
+    /// matching overlay placeholder, and clears any leftover overlay tint.
+    /// </summary>
+    public void RegisterMap(Grid grid, Tilemap ground, Tilemap overlay)
     {
-        _tiles = new GridTile[width, height];
-        float step = tileSize + tileGap;
+        Grid    = grid;
+        Ground  = ground;
+        Overlay = overlay;
 
-        for (int x = 0; x < width; x++)
+        _tiles.Clear();
+
+        var overlayTile = IsoMapBuilder.GetOverlayTile();
+        var bounds      = ground.cellBounds;
+
+        for (int x = bounds.xMin; x < bounds.xMax; x++)
         {
-            for (int y = 0; y < height; y++)
+            for (int y = bounds.yMin; y < bounds.yMax; y++)
             {
-                Vector3 localPos = new(
-                    -(width  - 1) * step / 2f + x * step,
-                    -(height - 1) * step / 2f + y * step,
-                    0f);
+                var cell = new Vector3Int(x, y, 0);
+                if (ground.GetTile(cell) == null) continue;
 
-                GameObject tileGO = Instantiate(
-                    tilePrefab,
-                    transform.TransformPoint(localPos),
-                    Quaternion.identity,
-                    transform);
+                var pos = new Vector2Int(x, y);
 
-                tileGO.name = $"Tile ({x},{y})";
+                // Paint overlay placeholder so SetColor has something to tint.
+                if (overlay != null)
+                {
+                    overlay.SetTile(cell, overlayTile);
+                    overlay.SetColor(cell, new Color(0f, 0f, 0f, 0f));
+                }
 
-                GridTile tile = tileGO.GetComponent<GridTile>();
-                tile.Init(new Vector2Int(x, y), tileSize);
-                _tiles[x, y] = tile;
+                _tiles[pos] = new GridTile(pos, SetOverlayColor);
             }
         }
     }
 
-    private void SpawnGridLines()
+    private void SetOverlayColor(Vector2Int pos, Color color)
     {
-        float step = tileSize + tileGap;
-        float halfW = width  * step / 2f;
-        float halfH = height * step / 2f;
-
-        var linesGO = new GameObject("GridLines");
-        linesGO.transform.SetParent(transform, false);
-
-        // Horizontal lines
-        for (int row = 0; row <= height; row++)
-        {
-            float y = -halfH + row * step;
-            CreateLine(linesGO.transform,
-                new Vector3(-halfW, y, 0f),
-                new Vector3( halfW, y, 0f));
-        }
-
-        // Vertical lines
-        for (int col = 0; col <= width; col++)
-        {
-            float x = -halfW + col * step;
-            CreateLine(linesGO.transform,
-                new Vector3(x, -halfH, 0f),
-                new Vector3(x,  halfH, 0f));
-        }
+        if (Overlay == null) return;
+        Overlay.SetColor(new Vector3Int(pos.x, pos.y, 0), color);
     }
 
-    private void CreateLine(Transform parent, Vector3 start, Vector3 end)
-    {
-        var go = new GameObject("Line");
-        go.transform.SetParent(parent, false);
+    // ── Public API (kept stable for callers) ──────────────────────────────────
 
-        var lr = go.AddComponent<LineRenderer>();
-        lr.useWorldSpace = false;
-        lr.positionCount = 2;
-        lr.SetPosition(0, start);
-        lr.SetPosition(1, end);
-        lr.startWidth = lineWidth;
-        lr.endWidth   = lineWidth;
-        lr.startColor = lineColor;
-        lr.endColor   = lineColor;
-        lr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-        lr.receiveShadows = false;
-        lr.sortingOrder = 1; // draw on top of tile fills
+    public GridTile GetTile(int x, int y) => GetTile(new Vector2Int(x, y));
 
-        var shader = Shader.Find("Sprites/Default");
-        if (shader != null)
-            lr.material = new Material(shader) { color = lineColor };
-    }
-
-    // --- Public API ---
-
-    public GridTile GetTile(int x, int y)
-    {
-        if (!IsInBounds(x, y)) return null;
-        return _tiles[x, y];
-    }
-
-    public GridTile GetTile(Vector2Int pos) => GetTile(pos.x, pos.y);
-
-    public bool IsInBounds(int x, int y) => x >= 0 && x < width && y >= 0 && y < height;
-    public bool IsInBounds(Vector2Int pos) => IsInBounds(pos.x, pos.y);
-
-    public Vector3 GridToWorld(Vector2Int pos)
-    {
-        float step = tileSize + tileGap;
-        return transform.TransformPoint(new Vector3(
-            -(width  - 1) * step / 2f + pos.x * step,
-            -(height - 1) * step / 2f + pos.y * step,
-            0f));
-    }
+    public GridTile GetTile(Vector2Int pos) =>
+        _tiles.TryGetValue(pos, out var tile) ? tile : null;
 
     /// <summary>
-    /// Clears Highlighted and Targeted states back to Normal.
-    /// Occupied and Hazard states are left intact so entities remain visible.
+    /// Returns true if the cell is part of the playfield. With shape-only
+    /// walkability, this is equivalent to "the ground tilemap has a tile here".
     /// </summary>
+    public bool IsInBounds(Vector2Int pos) => _tiles.ContainsKey(pos);
+    public bool IsInBounds(int x, int y) => IsInBounds(new Vector2Int(x, y));
+
+    /// <summary>World-space center of a grid cell. Uses iso projection from the Grid component.</summary>
+    public Vector3 GridToWorld(Vector2Int pos)
+    {
+        if (Grid == null) return Vector3.zero;
+        return Grid.GetCellCenterWorld(new Vector3Int(pos.x, pos.y, 0));
+    }
+
+    /// <summary>Returns the cell under <paramref name="worldPos"/>, or null if no playfield cell.</summary>
+    public GridTile WorldToTile(Vector3 worldPos)
+    {
+        if (Grid == null) return null;
+        var cell = Grid.WorldToCell(worldPos);
+        return GetTile(new Vector2Int(cell.x, cell.y));
+    }
+
+    /// <summary>Iterates every walkable cell. Useful for bulk overlay clears.</summary>
+    public IEnumerable<GridTile> AllTiles => _tiles.Values;
+
     /// <summary>Remove the player movement overlay from every tile.</summary>
     public void ClearAllPlayerMoves()
     {
-        if (_tiles == null) return;
-        foreach (GridTile tile in _tiles)
+        foreach (var tile in _tiles.Values)
             tile.SetPlayerMove(PlayerMoveOverlay.None);
     }
 
     /// <summary>Remove the enemy range overlay from every tile.</summary>
     public void ClearAllEnemyRanges()
     {
-        if (_tiles == null) return;
-        foreach (GridTile tile in _tiles)
+        foreach (var tile in _tiles.Values)
             tile.SetEnemyRange(EnemyRangeOverlay.None);
     }
 
     /// <summary>Clear all hover highlights, leaving persistent states (Occupied, Hazard) intact.</summary>
     public void ResetAllTiles()
     {
-        if (_tiles == null) return;
-        foreach (GridTile tile in _tiles)
+        foreach (var tile in _tiles.Values)
             tile.ClearHover();
     }
 
@@ -198,12 +158,4 @@ public class GridManager : MonoBehaviour
         if (anchorTile != null && anchorTile.GetState() != TileVisualState.Targeted)
             anchorTile.SetState(TileVisualState.Highlighted);
     }
-
-#if UNITY_EDITOR
-    private void OnValidate()
-    {
-        if (!Application.isPlaying)
-            UnityEditor.EditorApplication.delayCall += () => { if (this) RebuildGrid(); };
-    }
-#endif
 }

@@ -2,6 +2,15 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 
+/// <summary>Which animator trigger is fired when this attack plays.</summary>
+public enum EnemyAttackAnimation
+{
+    Attack,
+    Attack2,
+    Attack3,
+    Ability,
+}
+
 /// <summary>How the attack pattern is positioned when the attack resolves.</summary>
 public enum EnemyAttackPatternType
 {
@@ -58,4 +67,8 @@ public class EnemyAttack
 
     [Tooltip("Effects applied to each entity on an affected tile.")]
     public List<CardEffect> effects = new();
+
+    [Tooltip("Which animator trigger to fire on the enemy when this attack plays.\n" +
+             "Maps to triggers: Attack / Attack 2 / Attack 3 / Ability.")]
+    public EnemyAttackAnimation animationTrigger = EnemyAttackAnimation.Attack;
 }

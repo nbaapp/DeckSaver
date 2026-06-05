@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using TMPro;
@@ -14,6 +15,7 @@ public class EnemyEntity : Entity, IPointerEnterHandler, IPointerExitHandler
 
     private TextMeshPro _intentLabel;
     private readonly HashSet<Vector2Int> _rangeTiles = new();
+    private EnemyAnimationController _animController;
 
     // ── Unity lifecycle ───────────────────────────────────────────────────────
 
@@ -36,8 +38,15 @@ public class EnemyEntity : Entity, IPointerEnterHandler, IPointerExitHandler
         maxHealth     = enemyData.maxHealth;
         currentHealth = maxHealth;
 
-        if (enemyData.artwork != null)
+        if (enemyData.animatorController != null)
+        {
+            _animController = gameObject.AddComponent<EnemyAnimationController>();
+            _animController.Bind(this, enemyData);
+        }
+        else if (enemyData.artwork != null)
+        {
             GetComponent<SpriteRenderer>().sprite = enemyData.artwork;
+        }
 
         BuildIntentLabel();
         OnDeath += HandleDeath;
@@ -170,7 +179,7 @@ public class EnemyEntity : Entity, IPointerEnterHandler, IPointerExitHandler
     /// <summary>
     /// Simulates the enemy's planned movement and returns each tile stepped
     /// through (including the landing tile), using the same destination logic
-    /// as ExecuteTurn so the highlight always matches the actual behaviour.
+    /// as ExecuteTurnRoutine so the highlight always matches the actual behaviour.
     /// </summary>
     private List<Vector2Int> GetPlannedMovePath()
     {
@@ -269,16 +278,17 @@ public class EnemyEntity : Entity, IPointerEnterHandler, IPointerExitHandler
         return offsets;
     }
 
-    /// <summary>Called during EnemyExecute phase — move then attack.</summary>
-    public void ExecuteTurn()
+    /// <summary>Called during EnemyExecute phase — move then attack. Coroutine
+    /// form so the TurnManager can wait for animations and tweens to finish.</summary>
+    public IEnumerator ExecuteTurnRoutine()
     {
-        if (SelectedAttack == null) return;
+        if (SelectedAttack == null) yield break;
 
         ClearRange();
         int steps       = GetEffectiveMoveSpeed(SelectedAttack.moveRange);
         var destination = ChooseLandingPosition(SelectedAttack, steps);
-        MoveToDestination(destination, steps);
-        PerformAttack(SelectedAttack);
+        yield return MoveToDestinationRoutine(destination, steps);
+        yield return PerformAttackRoutine(SelectedAttack);
     }
 
     // ── Movement AI ───────────────────────────────────────────────────────────
@@ -376,15 +386,20 @@ public class EnemyEntity : Entity, IPointerEnterHandler, IPointerExitHandler
     private static int Manhattan(Vector2Int a, Vector2Int b) =>
         Mathf.Abs(a.x - b.x) + Mathf.Abs(a.y - b.y);
 
-    private void MoveToDestination(Vector2Int destination, int steps)
+    private IEnumerator MoveToDestinationRoutine(Vector2Int destination, int steps)
     {
+        if (GridPosition == destination) yield break;
+
+        _animController?.PlayMove();
+
         for (int i = 0; i < steps; i++)
         {
             if (GridPosition == destination) break;
             var next = StepToward(GridPosition, destination);
             if (next == GridPosition) break;
             if (EntityManager.Instance.GetEntityAt(next) != null) break;
-            PlaceAt(next);
+            _animController?.FaceTowards(next);
+            yield return MoveStepRoutine(next);
         }
     }
 
@@ -402,11 +417,15 @@ public class EnemyEntity : Entity, IPointerEnterHandler, IPointerExitHandler
 
     // ── Attack ────────────────────────────────────────────────────────────────
 
-    private void PerformAttack(EnemyAttack attack)
+    private IEnumerator PerformAttackRoutine(EnemyAttack attack)
     {
-        if (attack.effects == null || attack.effects.Count == 0) return;
+        if (attack.effects == null || attack.effects.Count == 0) yield break;
 
         var positions = GetAttackPositions(attack);
+
+        if (positions.Count > 0)
+            _animController?.FaceTowards(positions[0]);
+        _animController?.PlayAttack(attack.animationTrigger);
 
         foreach (var effect in attack.effects)
         {
@@ -417,6 +436,11 @@ public class EnemyEntity : Entity, IPointerEnterHandler, IPointerExitHandler
                 ResolveEffect(effect, this, entity);
             }
         }
+
+        // Hold the enemy on its attack frame so the next enemy doesn't act
+        // before the animation finishes. Skipped for static-sprite enemies.
+        if (_animController != null && data != null && data.attackAnimSeconds > 0f)
+            yield return new WaitForSeconds(data.attackAnimSeconds);
     }
 
     /// <summary>
@@ -559,6 +583,19 @@ public class EnemyEntity : Entity, IPointerEnterHandler, IPointerExitHandler
         BattleEvents.FireEnemyKilled(this);
         EntityManager.Instance?.RemoveEnemy(this);
         GridManager.Instance?.GetTile(GridPosition)?.SetState(TileVisualState.Normal);
+
+        // Hold the corpse alive long enough for the Death animation to play, then destroy.
+        // Static-sprite enemies (no controller) destroy immediately.
+        float wait = (_animController != null && data != null) ? data.deathAnimSeconds : 0f;
+        if (wait > 0f)
+            StartCoroutine(DestroyAfter(wait));
+        else
+            Destroy(gameObject);
+    }
+
+    private IEnumerator DestroyAfter(float seconds)
+    {
+        yield return new WaitForSeconds(seconds);
         Destroy(gameObject);
     }
 }

@@ -5,8 +5,9 @@ using UnityEngine;
 /// All mutable state for the current run.
 /// Created fresh by the Hub when a run starts and carried between scenes via RunCarrier.
 ///
-/// The run's structure is determined by the MapGraph, which is generated once at
-/// construction time and mutated as the player visits nodes.
+/// The run progresses through up to 3 acts, each with its own map generated when
+/// the player selects a Front. The Shift mechanic in Act 2 can redirect the player
+/// to a linear alternate-ending path.
 /// </summary>
 public class RunState
 {
@@ -14,8 +15,21 @@ public class RunState
     public RunConfig Config { get; }
 
     // ── Map ───────────────────────────────────────────────────────────────────
-    /// <summary>The full run map. Generated at construction, mutated as nodes are visited.</summary>
-    public MapGraph Map { get; }
+    /// <summary>The current act's map. Null until the player selects a Front for this act.</summary>
+    public MapGraph Map { get; private set; }
+
+    // ── Act & Front tracking ──────────────────────────────────────────────────
+    /// <summary>Current act number (1, 2, or 3).</summary>
+    public int CurrentAct { get; private set; } = 1;
+
+    /// <summary>The Front the player chose for the current act.</summary>
+    public FrontConfig CurrentFront { get; private set; }
+
+    /// <summary>Whether the player has entered the Shift alternate-ending path.</summary>
+    public bool IsShifted { get; private set; }
+
+    /// <summary>Meta-progression currency earned on the shift path.</summary>
+    public int Shards { get; private set; }
 
     // ── Deck (mutable — fragment swaps create new runtime CardData instances) ─
     public List<CardData>  CurrentCards { get; } = new();
@@ -50,7 +64,61 @@ public class RunState
 
         Money = config.startingMoney;
 
-        Map = MapGenerator.Generate(config);
+        // Map is NOT generated here — it's generated when the player picks a Front via SetFront().
+    }
+
+    // ── Act & Front ───────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Returns the ActConfig for the current act number.
+    /// </summary>
+    public ActConfig GetCurrentActConfig()
+    {
+        return CurrentAct switch
+        {
+            1 => Config.act1,
+            2 => Config.act2,
+            3 => Config.act3,
+            _ => null,
+        };
+    }
+
+    /// <summary>
+    /// Set the player's chosen Front and generate the map for the current act.
+    /// </summary>
+    public void SetFront(FrontConfig front)
+    {
+        CurrentFront = front;
+        bool includeShift = CurrentAct == 2;
+        Map = MapGenerator.Generate(Config, front, includeShift);
+    }
+
+    /// <summary>
+    /// Advance to the next act. Heals all units to full and clears the map.
+    /// The new map is generated when the player picks a Front via SetFront().
+    /// </summary>
+    public void AdvanceAct()
+    {
+        CurrentAct++;
+        CurrentFront = null;
+        Map = null;
+        HealAllUnits();
+    }
+
+    /// <summary>
+    /// Enter the Shift alternate-ending path. Generates the linear shift map.
+    /// </summary>
+    public void EnterShift()
+    {
+        IsShifted = true;
+        Map = MapGenerator.GenerateShiftMap(Config, Config.shiftConfig);
+    }
+
+    // ── Shards ────────────────────────────────────────────────────────────────
+
+    public void EarnShards(int amount)
+    {
+        if (amount > 0) Shards += amount;
     }
 
     // ── Economy ───────────────────────────────────────────────────────────────
@@ -204,6 +272,13 @@ public class RunState
         if (amount <= 0) return;
         for (int i = 0; i < UnitHealths.Count; i++)
             UnitHealths[i] = Mathf.Min(UnitHealths[i] + amount, Config.unitMaxHealth);
+    }
+
+    /// <summary>Heal all surviving units to full HP.</summary>
+    public void HealAllUnits()
+    {
+        for (int i = 0; i < UnitHealths.Count; i++)
+            UnitHealths[i] = Config.unitMaxHealth;
     }
 
     /// <summary>Add a new unit at full health.</summary>

@@ -8,20 +8,15 @@ using UnityEngine.SceneManagement;
 /// Drives the Run scene — the space between battles where the player navigates the map.
 ///
 /// Flow each time this scene loads:
-///   Fresh run  → show map (map was generated when RunState was created)
-///   Battle won → give node rewards → show map
-///   Boss won   → give boss rewards → show run-complete panel
-///   Battle lost → show run-over panel
+///   Fresh run (no map)  → show front selection → generate map → show map
+///   Battle won          → give node rewards → show map (or advance act / end run)
+///   Boss won (act 1-2)  → advance act → show front selection → generate map → show map
+///   Boss won (act 3)    → show run-complete panel
+///   Shift boss won      → show run-complete panel (shifted)
+///   Battle lost         → show run-over panel
 ///
-/// Non-combat nodes (Camp, Shop, Event) are handled entirely within this scene:
-/// the map hides, the relevant panel shows, and when the player leaves the map
-/// is shown again.
-///
-/// === Scene Setup ===
-/// 1. Create a "Run" scene and add it to Build Settings.
-/// 2. Place a GameObject with this component and wire all inspector references.
-/// 3. MapView, BoonRewardPanel, FragmentSwapPanel, CampPanel, ShopPanel,
-///    and RunOverPanel should all start hidden (inactive).
+/// Non-combat nodes (Camp, Shop, Event) are handled entirely within this scene.
+/// The Shift node triggers the alternate-ending path.
 /// </summary>
 public class RunSceneController : MonoBehaviour
 {
@@ -30,13 +25,14 @@ public class RunSceneController : MonoBehaviour
     [SerializeField] private string _hubSceneName    = "Hub";
 
     [Header("Panels")]
-    [SerializeField] private MapView          _mapView;
-    [SerializeField] private NodeRewardPanel  _nodeRewardPanel;
-    [SerializeField] private BoonRewardPanel  _boonRewardPanel;
-    [SerializeField] private FragmentSwapPanel _fragmentSwapPanel;
-    [SerializeField] private CampPanel        _campPanel;
-    [SerializeField] private ShopPanel        _shopPanel;
-    [SerializeField] private RunOverPanel     _runOverPanel;
+    [SerializeField] private MapView              _mapView;
+    [SerializeField] private NodeRewardPanel      _nodeRewardPanel;
+    [SerializeField] private BoonRewardPanel      _boonRewardPanel;
+    [SerializeField] private FragmentSwapPanel    _fragmentSwapPanel;
+    [SerializeField] private CampPanel            _campPanel;
+    [SerializeField] private ShopPanel            _shopPanel;
+    [SerializeField] private RunOverPanel         _runOverPanel;
+    [SerializeField] private FrontSelectionPanel  _frontSelectionPanel;
 
     [Header("HUD")]
     [Tooltip("TextMeshProUGUI to display the player's current gold.")]
@@ -64,8 +60,11 @@ public class RunSceneController : MonoBehaviour
         switch (result)
         {
             case BattleResultCarrier.Result.None:
-                // Fresh run — map was generated in RunState constructor
-                ShowMap();
+                // Fresh run or new act — check if map exists
+                if (run.Map == null)
+                    ShowFrontSelection(run);
+                else
+                    ShowMap();
                 break;
 
             case BattleResultCarrier.Result.Win:
@@ -76,6 +75,25 @@ public class RunSceneController : MonoBehaviour
                 ShowRunOver(won: false, run);
                 break;
         }
+    }
+
+    // ── Front selection ──────────────────────────────────────────────────────
+
+    private void ShowFrontSelection(RunState run)
+    {
+        var actConfig = run.GetCurrentActConfig();
+        if (actConfig == null)
+        {
+            Debug.LogError($"[RunSceneController] No ActConfig for act {run.CurrentAct}.");
+            ReturnToHub();
+            return;
+        }
+
+        _frontSelectionPanel?.Show(actConfig, run.CurrentAct, front =>
+        {
+            run.SetFront(front);
+            ShowMap();
+        });
     }
 
     // ── Battle result handling ────────────────────────────────────────────────
@@ -96,18 +114,54 @@ public class RunSceneController : MonoBehaviour
         run.EarnMoney(goldEarned);
         UpdateMoneyDisplay();
 
-        bool isBoss      = node.Type == NodeType.Boss;
-        bool hasSwap     = node.Type == NodeType.StandardConflict || isBoss;
-        bool hasBoon     = node.Type == NodeType.HardConflict     || isBoss;
-        string header    = isBoss ? "Boss Defeated!" : "Battle Complete";
+        bool isBoss = node.Type == NodeType.Boss;
 
-        _nodeRewardPanel?.Show(header, goldEarned, hasSwap, hasBoon, isBoss, onContinue: () =>
+        // Shift path: give shards instead of normal rewards
+        if (run.IsShifted)
         {
             if (isBoss)
+            {
+                int shards = run.Config.shardsPerShiftEncounter;
+                run.EarnShards(shards);
                 ShowRunOver(won: true, run);
+            }
+            else
+            {
+                int shards = run.Config.shardsPerShiftEncounter;
+                run.EarnShards(shards);
+                // Simple reward display for shift path — just continue to map
+                _nodeRewardPanel?.Show("Battle Complete", goldEarned, hasFragmentSwap: false, hasBoon: false, isBoss: false, onContinue: ShowMap);
+            }
+            return;
+        }
+
+        // Normal path rewards
+        bool hasFragmentSwap = node.Type == NodeType.StandardConflict || isBoss;
+        bool hasBoon         = node.Type == NodeType.HardConflict     || isBoss;
+        string header        = isBoss ? "Boss Defeated!" : "Battle Complete";
+
+        _nodeRewardPanel?.Show(header, goldEarned, hasFragmentSwap, hasBoon, isBoss, onContinue: () =>
+        {
+            if (isBoss)
+                HandleBossDefeated(run);
             else
                 ShowMap();
         });
+    }
+
+    private void HandleBossDefeated(RunState run)
+    {
+        if (run.CurrentAct >= 3)
+        {
+            // Act 3 boss beaten — run won!
+            ShowRunOver(won: true, run);
+        }
+        else
+        {
+            // Advance to next act
+            run.AdvanceAct();
+            ShowFrontSelection(run);
+        }
     }
 
     // ── Map ───────────────────────────────────────────────────────────────────
@@ -165,7 +219,29 @@ public class RunSceneController : MonoBehaviour
                 run.Map.MarkCurrentNodeVisited();
                 ShowMap();
                 break;
+
+            case NodeType.Shift:
+                HandleShiftNode(run);
+                break;
         }
+    }
+
+    // ── Shift ─────────────────────────────────────────────────────────────────
+
+    private void HandleShiftNode(RunState run)
+    {
+        run.Map.MarkCurrentNodeVisited();
+
+        // Give a burst of rewards before entering the shift path
+        // For now: a large gold bonus
+        int burstGold = run.Config.moneyPerBoss * 2;
+        run.EarnMoney(burstGold);
+        UpdateMoneyDisplay();
+
+        // Enter the shift — generates the linear shift map
+        run.EnterShift();
+
+        _nodeRewardPanel?.Show("Shifted!", burstGold, hasFragmentSwap: false, hasBoon: false, isBoss: false, onContinue: ShowMap);
     }
 
     // ── Scene transitions ─────────────────────────────────────────────────────
@@ -210,6 +286,7 @@ public class RunSceneController : MonoBehaviour
         _campPanel?.Hide();
         _shopPanel?.Hide();
         _runOverPanel?.Hide();
+        _frontSelectionPanel?.Hide();
     }
 
     private static int MoneyForNode(NodeType type, RunConfig config) => type switch
