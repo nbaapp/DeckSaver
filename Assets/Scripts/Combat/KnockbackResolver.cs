@@ -8,6 +8,11 @@ using UnityEngine;
 /// stack soaks one tile of displacement and is consumed in the process. Movement halts at the first
 /// blocked step (grid edge or another entity); both colliders take damage equal to the remaining
 /// distance (wall collisions damage only the target).
+///
+/// Active <see cref="KnockbackRules"/> (from boons / the Commander) can bend this: ignore Rooted,
+/// remove the distance falloff on collision damage, grant player units immunity to collision damage,
+/// or deal per-tile damage to enemies for every square they travel. After resolving, fires
+/// <see cref="BattleEvents.OnForcedMovement"/> with the tiles actually traveled.
 /// </summary>
 public static class KnockbackResolver
 {
@@ -19,38 +24,64 @@ public static class KnockbackResolver
     {
         if (target == null || distance <= 0) return;
 
-        // Rooted soaks displacement and decays by the amount absorbed.
-        int rooted   = target.GetStatusValue(StatusType.Rooted);
-        int absorbed = Mathf.Min(rooted, distance);
-        for (int i = 0; i < absorbed; i++) target.DecrementStatus(StatusType.Rooted);
-        distance -= absorbed;
-        if (distance <= 0) return;
+        // Rooted soaks displacement and decays by the amount absorbed — unless rules ignore Rooted.
+        if (!KnockbackRules.IgnoresRooted)
+        {
+            int rooted   = target.GetStatusValue(StatusType.Rooted);
+            int absorbed = Mathf.Min(rooted, distance);
+            for (int i = 0; i < absorbed; i++) target.DecrementStatus(StatusType.Rooted);
+            distance -= absorbed;
+            if (distance <= 0) return;
+        }
 
         Vector2Int dir = GetDirection(anchor, target.GridPosition);
         if (dir == Vector2Int.zero) return;
         if (isPull) dir = -dir;
 
+        int intended = distance;   // distance the unit was set to travel (post-Rooted)
+        int traveled = 0;          // tiles actually moved before stopping
+
         for (int i = 0; i < distance; i++)
         {
             Vector2Int next      = target.GridPosition + dir;
             int        remaining = distance - i;
+            // Falloff: collision damage normally decays as the unit slides; the rule pins it to full intended distance.
+            int        impact    = KnockbackRules.IgnoreDistanceFalloff ? intended : remaining;
 
             if (!GridManager.Instance.IsInBounds(next))
             {
-                target.TakeDamage(remaining); // wall collision — only target
-                return;
+                DealCollisionDamage(target, impact); // wall collision — only target
+                break;
             }
 
             var blocker = EntityManager.Instance.GetEntityAt(next);
             if (blocker != null)
             {
-                target.TakeDamage(remaining);
-                blocker.TakeDamage(remaining);
-                return;
+                DealCollisionDamage(target,  impact);
+                DealCollisionDamage(blocker, impact);
+                break;
             }
 
             target.PlaceAt(next);
+            traveled++;
         }
+
+        // Per-tile travel damage to enemies ("1 dmg per square of forced movement traveled").
+        int perTile = KnockbackRules.DamagePerTileVsEnemies;
+        if (traveled > 0 && perTile > 0 && target is EnemyEntity)
+            target.TakeDamage(traveled * perTile);
+
+        // Notify boons / Commander (OnForcedMovement) of the actual displacement.
+        if (traveled > 0)
+            BattleEvents.FireForcedMovement(target, traveled);
+    }
+
+    /// <summary>Collision damage, gated by the player-unit immunity rule. Enemies are never immune.</summary>
+    private static void DealCollisionDamage(Entity entity, int amount)
+    {
+        if (entity == null || amount <= 0) return;
+        if (KnockbackRules.PlayerImmuneToCollisionDamage && !(entity is EnemyEntity)) return;
+        entity.TakeDamage(amount);
     }
 
     /// <summary>

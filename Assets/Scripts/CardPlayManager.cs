@@ -135,7 +135,7 @@ public class CardPlayManager : MonoBehaviour
                 {
                     var target = EntityManager.Instance.GetEntityAt(tile.GridPosition);
                     if (target == null) continue;
-                    int dmg   = ComputeValue(effect.baseValue, globalMods, data.modifiers, cardKeywords);
+                    int dmg   = ComputeValue(effect.baseValue, globalMods, data.modifiers, cardKeywords, effect.type, effect.statusType);
                     int count = Mathf.Max(1, effect.hits);
                     for (int h = 0; h < count; h++)
                         StatusResolver.ApplyStrike(strikeAttacker, target, atkPos, dmg, out _);
@@ -147,7 +147,7 @@ public class CardPlayManager : MonoBehaviour
                 {
                     var entity = EntityManager.Instance.GetEntityAt(tile.GridPosition);
                     if (entity == null) continue;
-                    int block = ComputeValue(effect.baseValue, globalMods, data.modifiers, cardKeywords);
+                    int block = ComputeValue(effect.baseValue, globalMods, data.modifiers, cardKeywords, effect.type, effect.statusType);
                     int count = Mathf.Max(1, effect.hits);
                     for (int h = 0; h < count; h++)
                         entity.GainBlock(block);
@@ -159,7 +159,7 @@ public class CardPlayManager : MonoBehaviour
                 {
                     var entity = EntityManager.Instance.GetEntityAt(tile.GridPosition);
                     if (entity == null) continue;
-                    int heal  = ComputeValue(effect.baseValue, globalMods, data.modifiers, cardKeywords);
+                    int heal  = ComputeValue(effect.baseValue, globalMods, data.modifiers, cardKeywords, effect.type, effect.statusType);
                     int count = Mathf.Max(1, effect.hits);
                     for (int h = 0; h < count; h++)
                         entity.Heal(heal);
@@ -171,7 +171,7 @@ public class CardPlayManager : MonoBehaviour
                 {
                     var entity = EntityManager.Instance.GetEntityAt(tile.GridPosition);
                     if (entity == null) continue;
-                    int stacks = ComputeValue(effect.baseValue, globalMods, data.modifiers, cardKeywords);
+                    int stacks = ComputeValue(effect.baseValue, globalMods, data.modifiers, cardKeywords, effect.type, effect.statusType);
                     int count  = Mathf.Max(1, effect.hits);
                     for (int h = 0; h < count; h++)
                         entity.ApplyStatus(effect.statusType, stacks);
@@ -184,7 +184,7 @@ public class CardPlayManager : MonoBehaviour
                 {
                     var target = EntityManager.Instance.GetEntityAt(tile.GridPosition);
                     if (target == null) continue;
-                    int distance = ComputeValue(effect.baseValue, globalMods, data.modifiers, cardKeywords);
+                    int distance = ComputeValue(effect.baseValue, globalMods, data.modifiers, cardKeywords, effect.type, effect.statusType);
                     int count    = Mathf.Max(1, effect.hits);
                     for (int h = 0; h < count; h++)
                         KnockbackResolver.Resolve(target, anchorPos, distance, isPull: effect.type == EffectType.Pull);
@@ -219,11 +219,13 @@ public class CardPlayManager : MonoBehaviour
         int baseValue,
         List<TileModifier> globalMods,
         List<TileModifier> tileMods,
-        HashSet<Keyword> cardKeywords)
+        HashSet<Keyword> cardKeywords,
+        EffectType effectType,
+        StatusType statusType)
     {
         float v = baseValue;
-        if (globalMods != null) foreach (var m in globalMods) if (m.AppliesTo(cardKeywords)) Apply(ref v, m);
-        if (tileMods   != null) foreach (var m in tileMods)   if (m.AppliesTo(cardKeywords)) Apply(ref v, m);
+        if (globalMods != null) foreach (var m in globalMods) if (m.AppliesTo(cardKeywords) && m.AppliesToEffect(effectType, statusType)) Apply(ref v, m);
+        if (tileMods   != null) foreach (var m in tileMods)   if (m.AppliesTo(cardKeywords) && m.AppliesToEffect(effectType, statusType)) Apply(ref v, m);
         return Mathf.RoundToInt(v);
     }
 

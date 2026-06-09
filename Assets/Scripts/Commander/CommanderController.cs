@@ -42,6 +42,7 @@ public class CommanderController : MonoBehaviour
         BattleEvents.OnPlayerStatusReceived += HandleStatusReceived;
         BattleEvents.OnCardDrawn            += HandleCardDrawn;
         BattleEvents.OnCardDiscarded        += HandleCardDiscarded;
+        BattleEvents.OnForcedMovement       += HandleForcedMovement;
         GridInputHandler.OnTileClicked      += HandleTileClickedForActive;
     }
 
@@ -58,6 +59,7 @@ public class CommanderController : MonoBehaviour
         BattleEvents.OnPlayerStatusReceived -= HandleStatusReceived;
         BattleEvents.OnCardDrawn            -= HandleCardDrawn;
         BattleEvents.OnCardDiscarded        -= HandleCardDiscarded;
+        BattleEvents.OnForcedMovement       -= HandleForcedMovement;
         GridInputHandler.OnTileClicked      -= HandleTileClickedForActive;
         KeywordOverlay.ClearOwner(this);
     }
@@ -96,6 +98,21 @@ public class CommanderController : MonoBehaviour
             p.trigger == PassiveTrigger.StatusImmunity &&
             p.specificStatus == type);
     }
+
+    // ── Forced-movement config (consumed by KnockbackRules) ───────────────────
+
+    private bool HasTrigger(PassiveTrigger trigger) =>
+        _commander != null && _commander.passiveEffects.Any(p => p.trigger == trigger);
+
+    public bool KnockbackIgnoresDistanceFalloff() => HasTrigger(PassiveTrigger.KnockbackIgnoreDistanceFalloff);
+    public bool KnockbackIgnoresRooted()          => HasTrigger(PassiveTrigger.KnockbackIgnoresRooted);
+    public bool PlayerImmuneToKnockbackDamage()   => HasTrigger(PassiveTrigger.KnockbackDamageImmunity);
+
+    /// <summary>Total per-tile knockback damage vs enemies contributed by the Commander's passives.</summary>
+    public int KnockbackDamagePerTile() =>
+        _commander == null ? 0
+        : _commander.passiveEffects.Where(p => p.trigger == PassiveTrigger.KnockbackDamagePerTile)
+                                   .Sum(p => p.statValue);
 
     // ── Active ability ────────────────────────────────────────────────────────
 
@@ -219,10 +236,9 @@ public class CommanderController : MonoBehaviour
     {
         var entity = EntityManager.Instance.GetEntityAt(tile.GridPosition);
         if (entity == null) return;
-        // Status stacks are not scaled by tile modifiers — use baseValue directly.
-        int value = effect.type == EffectType.Status
-            ? effect.baseValue
-            : ComputeValue(effect.baseValue, globalMods, data.modifiers, activeKeywords);
+        // Tile modifiers scale every effect channel (including Status stacks), gated by
+        // their keyword and effect-type filters — mirrors CardPlayManager.ComputeValue.
+        int value = ComputeValue(effect.baseValue, globalMods, data.modifiers, activeKeywords, effect.type, effect.statusType);
         ApplyEffectToEntity(effect, entity, value, StatusType.None, anchorPos);
     }
 
@@ -234,6 +250,7 @@ public class CommanderController : MonoBehaviour
     private void HandlePlayerDamaged(int net)                  => FirePassives(PassiveTrigger.OnDamage,     null,   net);
     private void HandleCardDrawn(CardData _)                   => FirePassives(PassiveTrigger.OnDraw,       null,   0);
     private void HandleCardDiscarded(CardData _)               => FirePassives(PassiveTrigger.OnDiscard,    null,   0);
+    private void HandleForcedMovement(Entity moved, int tiles) => FirePassives(PassiveTrigger.OnForcedMovement, moved, tiles);
 
     private void HandlePlayerStrike(Entity target, int damage)
     {
@@ -443,11 +460,11 @@ public class CommanderController : MonoBehaviour
     // ── Value computation (mirrors CardPlayManager) ───────────────────────────
 
     private static int ComputeValue(int baseValue, List<TileModifier> globalMods, List<TileModifier> tileMods,
-                                    HashSet<Keyword> keywords)
+                                    HashSet<Keyword> keywords, EffectType effectType, StatusType statusType)
     {
         float v = baseValue;
-        if (globalMods != null) foreach (var m in globalMods) if (m.AppliesTo(keywords)) ApplyMod(ref v, m);
-        if (tileMods   != null) foreach (var m in tileMods)   if (m.AppliesTo(keywords)) ApplyMod(ref v, m);
+        if (globalMods != null) foreach (var m in globalMods) if (m.AppliesTo(keywords) && m.AppliesToEffect(effectType, statusType)) ApplyMod(ref v, m);
+        if (tileMods   != null) foreach (var m in tileMods)   if (m.AppliesTo(keywords) && m.AppliesToEffect(effectType, statusType)) ApplyMod(ref v, m);
         return Mathf.RoundToInt(v);
     }
 

@@ -41,6 +41,10 @@ public static class BattleEvents
     /// <summary>Fired whenever any unit (player or enemy) finishes a single grid step.</summary>
     public static event Action<Entity> OnUnitMoved;
 
+    /// <summary>Fired after a unit is displaced by forced movement (Push/Pull/OffBalance).
+    /// Args: the moved unit, tiles actually traveled (after Rooted absorption and any collision stop).</summary>
+    public static event Action<Entity, int> OnForcedMovement;
+
     /// <summary>Fired when a player unit is permanently killed (removed from the run).</summary>
     public static event Action<PlayerEntity> OnUnitDied;
 
@@ -61,6 +65,7 @@ public static class BattleEvents
     public static void FireEnemyHit(EnemyEntity enemy, int net)          => OnEnemyHit?.Invoke(enemy, net);
     public static void FireEnemyKilled(EnemyEntity enemy)                 => OnEnemyKilled?.Invoke(enemy);
     public static void FireUnitMoved(Entity unit)                         => OnUnitMoved?.Invoke(unit);
+    public static void FireForcedMovement(Entity unit, int tilesTraveled) => OnForcedMovement?.Invoke(unit, tilesTraveled);
     public static void FireUnitDied(PlayerEntity unit)                    => OnUnitDied?.Invoke(unit);
     public static void FirePlayerStatusReceived(StatusType t, int stacks) => OnPlayerStatusReceived?.Invoke(t, stacks);
 }

@@ -30,6 +30,14 @@ public class PassiveEffectDrawer : PropertyDrawer
                 h += LineStep; // specificStatus
                 break;
 
+            case PassiveTrigger.KnockbackDamagePerTile:
+                h += LineStep;        // statValue
+                h += LineH + Pad * 4; // help box
+                break;
+
+            case PassiveTrigger.KnockbackIgnoreDistanceFalloff:
+            case PassiveTrigger.KnockbackIgnoresRooted:
+            case PassiveTrigger.KnockbackDamageImmunity:
             case PassiveTrigger.Special:
                 h += LineH + Pad * 4; // help box
                 break;
@@ -75,6 +83,31 @@ public class PassiveEffectDrawer : PropertyDrawer
             // ── Status immunity ───────────────────────────────────────────────
             case PassiveTrigger.StatusImmunity:
                 DrawEnum(ref r, prop, "specificStatus", "Immune To");
+                break;
+
+            // ── Knockback config: per-tile damage value + note ────────────────
+            case PassiveTrigger.KnockbackDamagePerTile:
+                DrawInt(ref r, prop, "statValue", "Damage / Tile");
+                EditorGUI.HelpBox(
+                    new Rect(r.x, r.y, r.width, LineH + Pad * 4),
+                    "Each tile an enemy is forcibly moved deals this much damage to it.", MessageType.Info);
+                break;
+
+            // ── Knockback config: flag-only triggers (presence is the whole rule) ──
+            case PassiveTrigger.KnockbackIgnoreDistanceFalloff:
+                EditorGUI.HelpBox(
+                    new Rect(r.x, r.y, r.width, LineH + Pad * 4),
+                    "Collision damage uses the full intended distance — no falloff as the unit slides.", MessageType.Info);
+                break;
+            case PassiveTrigger.KnockbackIgnoresRooted:
+                EditorGUI.HelpBox(
+                    new Rect(r.x, r.y, r.width, LineH + Pad * 4),
+                    "Rooted no longer absorbs knockback displacement.", MessageType.Info);
+                break;
+            case PassiveTrigger.KnockbackDamageImmunity:
+                EditorGUI.HelpBox(
+                    new Rect(r.x, r.y, r.width, LineH + Pad * 4),
+                    "Player units take no knockback collision damage.", MessageType.Info);
                 break;
 
             // ── Special: no fields, just a note ───────────────────────────────

@@ -37,6 +37,7 @@ public class BoonManager : MonoBehaviour
         BattleEvents.OnPlayerStatusReceived += HandleStatusReceived;
         BattleEvents.OnCardDrawn            += HandleCardDrawn;
         BattleEvents.OnCardDiscarded        += HandleCardDiscarded;
+        BattleEvents.OnForcedMovement       += HandleForcedMovement;
     }
 
     private void OnDisable()
@@ -52,6 +53,7 @@ public class BoonManager : MonoBehaviour
         BattleEvents.OnPlayerStatusReceived -= HandleStatusReceived;
         BattleEvents.OnCardDrawn            -= HandleCardDrawn;
         BattleEvents.OnCardDiscarded        -= HandleCardDiscarded;
+        BattleEvents.OnForcedMovement       -= HandleForcedMovement;
         KeywordOverlay.ClearOwner(this);
     }
 
@@ -90,6 +92,31 @@ public class BoonManager : MonoBehaviour
         return false;
     }
 
+    // ── Forced-movement config (consumed by KnockbackRules) ───────────────────
+
+    private bool HasTrigger(PassiveTrigger trigger)
+    {
+        foreach (var boon in _boons)
+            foreach (var passive in boon.effects)
+                if (passive.trigger == trigger) return true;
+        return false;
+    }
+
+    public bool KnockbackIgnoresDistanceFalloff() => HasTrigger(PassiveTrigger.KnockbackIgnoreDistanceFalloff);
+    public bool KnockbackIgnoresRooted()          => HasTrigger(PassiveTrigger.KnockbackIgnoresRooted);
+    public bool PlayerImmuneToKnockbackDamage()   => HasTrigger(PassiveTrigger.KnockbackDamageImmunity);
+
+    /// <summary>Total per-tile knockback damage vs enemies, summed across all active boons.</summary>
+    public int KnockbackDamagePerTile()
+    {
+        int total = 0;
+        foreach (var boon in _boons)
+            foreach (var passive in boon.effects)
+                if (passive.trigger == PassiveTrigger.KnockbackDamagePerTile)
+                    total += passive.statValue;
+        return total;
+    }
+
     // ── Event handlers ────────────────────────────────────────────────────────
 
     private void HandleTurnStart()                            => FirePassives(PassiveTrigger.OnTurnStart,  null, 0);
@@ -98,6 +125,7 @@ public class BoonManager : MonoBehaviour
     private void HandlePlayerDamaged(int net)                 => FirePassives(PassiveTrigger.OnDamage,     null, net);
     private void HandleCardDrawn(CardData _)                  => FirePassives(PassiveTrigger.OnDraw,       null, 0);
     private void HandleCardDiscarded(CardData _)              => FirePassives(PassiveTrigger.OnDiscard,    null, 0);
+    private void HandleForcedMovement(Entity moved, int tiles)=> FirePassives(PassiveTrigger.OnForcedMovement, moved, tiles);
 
     private void HandlePlayerStrike(Entity target, int damage)
     {
