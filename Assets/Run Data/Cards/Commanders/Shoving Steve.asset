@@ -1,0 +1,41 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7e3cd3f8875a74e2189323e25d171a28, type: 3}
+  m_Name: Shoving Steve
+  m_EditorClassIdentifier: Assembly-CSharp::CommanderData
+  commanderName: Shoving Steve
+  artwork: {fileID: 0}
+  activeFlavorText: Knock every enemy off balance, then shove them all back a step.
+  activesPerBattle: 1
+  activeEffects:
+  - type: 5
+    baseValue: 3
+    hits: 1
+    statusType: 12
+  - type: 6
+    baseValue: 1
+    hits: 1
+    statusType: 0
+  activeArea: {fileID: 0}
+  passiveFlavorText: His shoves hit just as hard from across the room.
+  passiveEffects:
+  - trigger: 15
+    statType: 0
+    statValue: 0
+    target: 0
+    valueSource: 0
+    effects: []
+    statusCondition: 0
+    specificStatus: 0
+    statusSet: 
+    requiredCardKeywords: 
+  keywordOverlays: []

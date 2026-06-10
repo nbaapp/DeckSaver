@@ -82,3 +82,6 @@ crashlytics-build.properties
 # TestRunner
 InitTestScene*.unity*
 /[Aa]ssets/[Ii]nit[Tt]est[Ss]cene*.unity*
+
+# Local-only design-tracker CSVs synced from Google Sheets (see ProjectNotes/sync-sheet.ps1)
+/ProjectNotes/*.csv
